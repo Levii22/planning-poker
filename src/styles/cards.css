@@ -200,10 +200,41 @@
 /* Flying card animation */
 .flying-card {
     animation: none !important;
+    background: linear-gradient(145deg, #3730a3, #312e81);
+    border: 2px solid var(--accent-primary);
+    border-radius: var(--radius-md);
+    box-shadow: 0 0 20px var(--accent-glow), 0 0 40px var(--accent-glow), 0 10px 40px rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
 }
 
 .flying-card .card-inner {
+    width: 100%;
+    height: 100%;
+    position: relative;
     transform-style: preserve-3d;
+}
+
+.flying-card .card-front {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+}
+
+.flying-card .card-back {
+    display: none;
+}
+
+.flying-card .card-value {
+    font-size: var(--font-size-xl);
+    font-weight: 700;
+    color: var(--text-primary);
 }
 
 /* Card glow effects for revealed state */
