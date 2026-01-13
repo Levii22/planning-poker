@@ -10,18 +10,41 @@ const hostNameInput = document.getElementById('hostName');
 const playerNameInput = document.getElementById('playerName');
 const roomCodeInput = document.getElementById('roomCode');
 const errorMessage = document.getElementById('errorMessage');
+const connectionStatus = document.getElementById('connectionStatus');
 
 // State
 let isConnected = false;
 
+// Update connection status UI
+function updateConnectionStatus(status) {
+  connectionStatus.className = 'connection-status ' + status;
+  const statusText = connectionStatus.querySelector('.status-text');
+
+  switch (status) {
+    case 'connecting':
+      statusText.textContent = 'Connecting...';
+      break;
+    case 'connected':
+      statusText.textContent = 'Connected';
+      break;
+    case 'disconnected':
+      statusText.textContent = 'Disconnected';
+      break;
+  }
+}
+
 // Initialize
 async function init() {
+  updateConnectionStatus('connecting');
+
   try {
     await wsClient.connect();
     isConnected = true;
+    updateConnectionStatus('connected');
     setupEventListeners();
     setupWebSocketHandlers();
   } catch (error) {
+    updateConnectionStatus('disconnected');
     showError('Failed to connect to server. Please refresh the page.');
   }
 }
@@ -56,6 +79,26 @@ function setupWebSocketHandlers() {
 
   wsClient.on('error', (msg) => {
     showError(msg.message);
+  });
+
+  // Connection state handlers
+  wsClient.on('connection_closed', () => {
+    isConnected = false;
+  });
+
+  wsClient.on('connection_reconnecting', () => {
+    updateConnectionStatus('connecting');
+  });
+
+  wsClient.on('connection_restored', () => {
+    isConnected = true;
+    updateConnectionStatus('connected');
+  });
+
+  wsClient.on('connection_lost', () => {
+    isConnected = false;
+    updateConnectionStatus('disconnected');
+    showError('Connection lost. Please refresh the page.');
   });
 }
 

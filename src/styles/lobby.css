@@ -51,6 +51,70 @@
     font-size: var(--font-size-lg);
 }
 
+/* Connection Status Indicator */
+.connection-status {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-top: var(--space-md);
+    padding: var(--space-xs) var(--space-md);
+    border-radius: var(--radius-full);
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    font-size: var(--font-size-sm);
+    transition: all var(--transition-base);
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    transition: all var(--transition-base);
+}
+
+/* Connecting state */
+.connection-status.connecting .status-dot {
+    background: var(--warning, #f59e0b);
+    animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+.connection-status.connecting .status-text {
+    color: var(--warning, #f59e0b);
+}
+
+/* Connected state */
+.connection-status.connected .status-dot {
+    background: var(--success);
+    box-shadow: 0 0 8px var(--success);
+}
+
+.connection-status.connected .status-text {
+    color: var(--success);
+}
+
+/* Disconnected state */
+.connection-status.disconnected .status-dot {
+    background: var(--danger);
+}
+
+.connection-status.disconnected .status-text {
+    color: var(--danger);
+}
+
+@keyframes pulse-dot {
+
+    0%,
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+
+    50% {
+        opacity: 0.5;
+        transform: scale(0.8);
+    }
+}
+
 /* Action Cards */
 .lobby-actions {
     display: flex;

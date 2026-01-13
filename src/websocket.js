@@ -45,8 +45,11 @@ class WebSocketClient {
 
             this.ws.onclose = (event) => {
                 console.log('🔌 Disconnected from server', event.code, event.reason);
+                // Notify about disconnection
+                this.handleMessage({ type: 'connection_closed' });
                 // Only reconnect on unexpected closures
                 if (event.code !== 1000) {
+                    this.handleMessage({ type: 'connection_reconnecting' });
                     this.attemptReconnect();
                 }
             };
@@ -72,7 +75,9 @@ class WebSocketClient {
             console.log(`Attempting to reconnect in ${delay}ms (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
 
             setTimeout(() => {
-                this.connect().catch(() => {
+                this.connect().then(() => {
+                    this.handleMessage({ type: 'connection_restored' });
+                }).catch(() => {
                     // Connection failed, will be retried by onclose handler
                 });
             }, delay);
