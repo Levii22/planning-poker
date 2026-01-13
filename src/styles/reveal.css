@@ -1,0 +1,491 @@
+/* Dramatic Reveal Animation Styles */
+
+.reveal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.95);
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    animation: overlayIn 0.5s ease;
+    overflow: hidden;
+}
+
+@keyframes overlayIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+.reveal-overlay.fade-out {
+    animation: overlayOut 0.6s ease forwards;
+}
+
+@keyframes overlayOut {
+    from {
+        opacity: 1;
+    }
+
+    to {
+        opacity: 0;
+    }
+}
+
+/* Animated background when active */
+.reveal-overlay.active::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(circle at 30% 20%, rgba(99, 102, 241, 0.15), transparent 40%),
+        radial-gradient(circle at 70% 80%, rgba(139, 92, 246, 0.15), transparent 40%),
+        radial-gradient(circle at 50% 50%, rgba(16, 185, 129, 0.1), transparent 60%);
+    animation: bgPulse 3s ease-in-out infinite;
+}
+
+@keyframes bgPulse {
+
+    0%,
+    100% {
+        opacity: 0.5;
+        transform: scale(1);
+    }
+
+    50% {
+        opacity: 1;
+        transform: scale(1.1);
+    }
+}
+
+/* Countdown Phase */
+.reveal-countdown {
+    text-align: center;
+    animation: countdownAppear 0.5s ease;
+}
+
+@keyframes countdownAppear {
+    from {
+        opacity: 0;
+        transform: scale(2);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.countdown-text {
+    font-size: 3rem;
+    font-weight: 800;
+    color: var(--accent-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.3em;
+    animation: countdownPulse 0.6s ease-in-out infinite;
+    text-shadow: 0 0 40px var(--accent-glow), 0 0 80px var(--accent-glow);
+}
+
+@keyframes countdownPulse {
+
+    0%,
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+
+    50% {
+        transform: scale(1.1);
+        opacity: 0.8;
+    }
+}
+
+/* Reveal Title */
+.reveal-title {
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    text-align: center;
+    margin-bottom: var(--space-2xl);
+    animation: titleSlam 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+    text-shadow: 0 0 30px rgba(255, 255, 255, 0.3);
+}
+
+@keyframes titleSlam {
+    0% {
+        opacity: 0;
+        transform: scale(3) translateY(-50px);
+    }
+
+    60% {
+        opacity: 1;
+        transform: scale(0.9) translateY(0);
+    }
+
+    100% {
+        transform: scale(1) translateY(0);
+    }
+}
+
+/* Reveal Cards Wrapper */
+.reveal-cards-wrapper {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: flex-start;
+    gap: var(--space-xl);
+    max-width: 1000px;
+    padding: var(--space-xl);
+}
+
+/* Reveal Cards Container (legacy support) */
+.reveal-cards {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-xl);
+    z-index: 10;
+}
+
+/* Individual Reveal Card */
+.reveal-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-md);
+    opacity: 0;
+    transform: translateY(100px) scale(0.5);
+    animation: cardSlideIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    animation-delay: calc(var(--reveal-index) * 100ms);
+    position: relative;
+}
+
+.reveal-card.revealed {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+}
+
+@keyframes cardSlideIn {
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* Spotlight effect */
+.reveal-card.spotlight {
+    z-index: 20;
+}
+
+.reveal-card.spotlight::before {
+    content: '';
+    position: absolute;
+    width: 200px;
+    height: 200px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(99, 102, 241, 0.4), transparent 60%);
+    filter: blur(30px);
+    animation: spotlightGlow 0.5s ease forwards;
+    z-index: -1;
+}
+
+@keyframes spotlightGlow {
+    from {
+        opacity: 0;
+        transform: scale(0.5);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.reveal-player-name {
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+    color: var(--text-muted);
+    text-align: center;
+    transition: all 0.3s ease;
+}
+
+.reveal-card.spotlight .reveal-player-name,
+.reveal-card.revealed .reveal-player-name {
+    color: var(--text-primary);
+    text-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+}
+
+/* Card styling */
+.reveal-card .card {
+    width: 90px;
+    height: 126px;
+    perspective: 1000px;
+    -webkit-perspective: 1000px;
+    transform-style: preserve-3d;
+    -webkit-transform-style: preserve-3d;
+}
+
+.reveal-card .card .card-inner {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    transform-style: preserve-3d;
+    -webkit-transform-style: preserve-3d;
+    transform: rotateY(180deg);
+    -webkit-transform: rotateY(180deg);
+    transition: transform 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    -webkit-transition: -webkit-transform 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.reveal-card.flip-now .card .card-inner {
+    transform: rotateY(0deg);
+    -webkit-transform: rotateY(0deg);
+}
+
+.reveal-card .card .card-front,
+.reveal-card .card .card-back {
+    position: absolute;
+    inset: 0;
+    border-radius: 12px;
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.reveal-card .card .card-front {
+    background: linear-gradient(145deg, #3a4065, #252a45);
+    border: 3px solid #6366f1;
+    box-shadow:
+        0 0 30px rgba(99, 102, 241, 0.5),
+        0 0 60px rgba(99, 102, 241, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    transform: rotateY(0deg);
+    -webkit-transform: rotateY(0deg);
+    z-index: 2;
+}
+
+.reveal-card .card .card-front .card-value {
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: #f9fafb;
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+}
+
+.reveal-card .card .card-back {
+    background: linear-gradient(135deg, #312e81, #1e1b4b);
+    border: 3px solid rgba(139, 92, 246, 0.5);
+    transform: rotateY(180deg);
+    -webkit-transform: rotateY(180deg);
+    overflow: hidden;
+    z-index: 1;
+}
+
+.reveal-card .card .card-back::before {
+    content: '';
+    position: absolute;
+    inset: 6px;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+}
+
+.reveal-card .card .card-back .back-pattern {
+    font-size: 3rem;
+    opacity: 0.5;
+}
+
+/* Impact effect when card lands */
+.reveal-card.impact {
+    animation: cardImpact 0.4s ease forwards;
+    opacity: 1;
+}
+
+@keyframes cardImpact {
+    0% {
+        transform: translateY(0) scale(1);
+        opacity: 1;
+    }
+
+    30% {
+        transform: translateY(-10px) scale(1.1);
+        opacity: 1;
+    }
+
+    60% {
+        transform: translateY(5px) scale(0.95);
+        opacity: 1;
+    }
+
+    100% {
+        transform: translateY(0) scale(1);
+        opacity: 1;
+    }
+}
+
+.reveal-card.impact .card .card-front {
+    animation: cardGlow 1s ease-in-out infinite;
+}
+
+@keyframes cardGlow {
+
+    0%,
+    100% {
+        box-shadow: 0 0 30px var(--accent-glow);
+    }
+
+    50% {
+        box-shadow: 0 0 50px var(--accent-glow), 0 0 80px var(--accent-glow);
+    }
+}
+
+/* Spark effect */
+.reveal-spark {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    opacity: 0;
+}
+
+.reveal-card.flip-now .reveal-spark {
+    animation: sparkBurst 0.6s ease-out;
+}
+
+@keyframes sparkBurst {
+    0% {
+        opacity: 1;
+        transform: scale(0);
+        box-shadow:
+            0 0 20px var(--accent-primary),
+            0 0 40px var(--accent-primary),
+            0 0 60px var(--accent-primary);
+        border-radius: 50%;
+    }
+
+    100% {
+        opacity: 0;
+        transform: scale(2);
+        box-shadow:
+            0 0 80px transparent,
+            0 0 120px transparent,
+            0 0 160px transparent;
+    }
+}
+
+/* Summary stats */
+.reveal-summary {
+    display: flex;
+    gap: var(--space-2xl);
+    margin-top: var(--space-2xl);
+    animation: summaryAppear 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes summaryAppear {
+    from {
+        opacity: 0;
+        transform: translateY(30px) scale(0.9);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.summary-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: var(--space-lg) var(--space-2xl);
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-xl);
+    backdrop-filter: blur(20px);
+}
+
+.stat-value {
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: var(--text-primary);
+}
+
+.stat-label {
+    font-size: var(--font-size-sm);
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+/* Close button */
+.reveal-close-btn {
+    margin-top: 2rem;
+    padding: 1rem 2.5rem;
+    font-family: inherit;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: white;
+    background: linear-gradient(135deg, #10b981, #059669);
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 20px rgba(16, 185, 129, 0.4);
+    animation: closeBtnAppear 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.reveal-close-btn:hover {
+    transform: translateY(-3px) scale(1.05);
+    box-shadow: 0 8px 30px rgba(16, 185, 129, 0.5);
+}
+
+.reveal-close-btn:active {
+    transform: translateY(0) scale(0.98);
+}
+
+@keyframes closeBtnAppear {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .reveal-cards-wrapper {
+        gap: var(--space-lg);
+        padding: var(--space-lg);
+    }
+
+    .reveal-card .card {
+        width: 70px;
+        height: 98px;
+    }
+
+    .reveal-card .card .card-front .card-value {
+        font-size: 2rem;
+    }
+
+    .reveal-player-name {
+        font-size: var(--font-size-md);
+    }
+
+    .countdown-text {
+        font-size: 2rem;
+    }
+
+    .reveal-title {
+        font-size: 1.75rem;
+    }
+}

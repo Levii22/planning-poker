@@ -1,0 +1,237 @@
+/* Player Avatar & Position Styles */
+
+.player {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-sm);
+    left: var(--pos-x);
+    top: var(--pos-y);
+    transform: translate(-50%, -50%);
+    transition: all var(--transition-base);
+    z-index: 5;
+}
+
+/* Entry animation */
+.player.player-enter {
+    animation: playerEnter 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes playerEnter {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0) rotate(-180deg);
+    }
+
+    to {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1) rotate(0deg);
+    }
+}
+
+/* Exit animation */
+.player.player-exit {
+    animation: playerExit 0.4s ease forwards;
+}
+
+@keyframes playerExit {
+    to {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0);
+    }
+}
+
+/* Player Avatar */
+.player-avatar {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--bg-tertiary), var(--bg-secondary));
+    border: 3px solid var(--glass-border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    transition: all var(--transition-base);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
+
+.avatar-letter {
+    font-size: var(--font-size-xl);
+    font-weight: 700;
+    color: var(--text-primary);
+    text-transform: uppercase;
+}
+
+/* Host badge */
+.host-badge {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    font-size: 1rem;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
+/* Current user highlight */
+.player.is-me .player-avatar {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 20px var(--accent-glow);
+}
+
+.player.is-me .player-name {
+    color: var(--accent-secondary);
+    font-weight: 600;
+}
+
+/* Has selected state */
+.player.has-selected .player-avatar {
+    border-color: var(--success);
+}
+
+.player.has-selected .player-avatar::after {
+    content: '';
+    position: absolute;
+    inset: -6px;
+    border-radius: 50%;
+    border: 2px solid var(--success);
+    opacity: 0.5;
+    animation: selectedPulse 2s ease-in-out infinite;
+}
+
+@keyframes selectedPulse {
+
+    0%,
+    100% {
+        transform: scale(1);
+        opacity: 0.5;
+    }
+
+    50% {
+        transform: scale(1.1);
+        opacity: 0;
+    }
+}
+
+/* Just selected animation */
+.player.just-selected .player-avatar {
+    animation: justSelected 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes justSelected {
+    0% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.2);
+    }
+
+    100% {
+        transform: scale(1);
+    }
+}
+
+/* Player Name */
+.player-name {
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    background: var(--glass-bg);
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: var(--radius-full);
+    white-space: nowrap;
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--glass-border);
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Card Slot */
+.player-card-slot {
+    margin-top: var(--space-xs);
+}
+
+/* Selected Indicator */
+.selected-indicator {
+    position: absolute;
+    bottom: -8px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--success);
+    color: white;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    font-weight: bold;
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.5);
+    animation: checkAppear 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes checkAppear {
+    from {
+        transform: translateX(-50%) scale(0);
+    }
+
+    to {
+        transform: translateX(-50%) scale(1);
+    }
+}
+
+/* Filter states */
+.player.faded {
+    opacity: 0.3;
+    transform: translate(-50%, -50%) scale(0.9);
+}
+
+.player.highlighted {
+    z-index: 10;
+}
+
+.player.highlighted .player-avatar {
+    border-color: var(--warning);
+    box-shadow: 0 0 30px rgba(245, 158, 11, 0.5);
+    animation: highlightPulse 1s ease-in-out infinite;
+}
+
+@keyframes highlightPulse {
+
+    0%,
+    100% {
+        box-shadow: 0 0 20px rgba(245, 158, 11, 0.5);
+    }
+
+    50% {
+        box-shadow: 0 0 40px rgba(245, 158, 11, 0.8);
+    }
+}
+
+.player.highlighted .card {
+    transform: scale(1.1);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .player-avatar {
+        width: 44px;
+        height: 44px;
+    }
+
+    .avatar-letter {
+        font-size: var(--font-size-md);
+    }
+
+    .player-name {
+        font-size: var(--font-size-xs);
+        max-width: 70px;
+    }
+
+    .card-placeholder {
+        width: 40px;
+        height: 56px;
+    }
+}

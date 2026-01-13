@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Agile Planning Poker - A game-like estimation tool for agile teams">
+  <title>🃏 Agile Poker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/src/styles/main.css">
+  <link rel="stylesheet" href="/src/styles/lobby.css">
+  <link rel="stylesheet" href="/src/styles/table.css">
+  <link rel="stylesheet" href="/src/styles/cards.css">
+  <link rel="stylesheet" href="/src/styles/players.css">
+  <link rel="stylesheet" href="/src/styles/reveal.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Lobby View -->
+    <div id="lobby" class="view active">
+      <div class="lobby-container">
+        <div class="logo-section">
+          <div class="logo-card">🃏</div>
+          <h1 class="logo-title">Agile Poker</h1>
+          <p class="logo-subtitle">Estimate stories together, in style</p>
+        </div>
+        
+        <div class="lobby-actions">
+          <div class="action-card create-room">
+            <h2>Host a Game</h2>
+            <p>Create a new room and invite your team</p>
+            <input type="text" id="hostName" placeholder="Your name" maxlength="20">
+            <button id="createRoomBtn" class="btn btn-primary">
+              <span class="btn-text">Create Room</span>
+              <span class="btn-icon">→</span>
+            </button>
+          </div>
+          
+          <div class="divider">
+            <span>or</span>
+          </div>
+          
+          <div class="action-card join-room">
+            <h2>Join a Game</h2>
+            <p>Enter the room code to join</p>
+            <input type="text" id="playerName" placeholder="Your name" maxlength="20">
+            <input type="text" id="roomCode" placeholder="Room code (e.g. ABC1)" maxlength="4">
+            <button id="joinRoomBtn" class="btn btn-secondary">
+              <span class="btn-text">Join Room</span>
+              <span class="btn-icon">→</span>
+            </button>
+          </div>
+        </div>
+        
+        <div id="errorMessage" class="error-message"></div>
+      </div>
+      
+      <div class="ambient-glow"></div>
+    </div>
+    
+    <!-- Game View -->
+    <div id="game" class="view">
+      <div class="game-header">
+        <div class="room-info">
+          <span class="room-label">Room</span>
+          <span id="roomCodeDisplay" class="room-code"></span>
+          <button id="copyRoomCode" class="copy-btn" title="Copy room code">📋</button>
+        </div>
+        <div class="game-status">
+          <span id="gameStatus" class="status-badge">Waiting</span>
+        </div>
+      </div>
+      
+      <div class="poker-arena">
+        <div class="poker-table">
+          <div class="table-felt">
+            <div class="table-logo">🃏</div>
+            <div id="tableCenter" class="table-center">
+              <div class="waiting-text">Waiting to start...</div>
+            </div>
+          </div>
+          <div id="playersContainer" class="players-container"></div>
+        </div>
+      </div>
+      
+      <div id="cardDeck" class="card-deck hidden">
+        <div class="deck-label">Choose your estimate</div>
+        <div id="deckCards" class="deck-cards"></div>
+      </div>
+      
+      <div id="hostControls" class="host-controls hidden">
+        <button id="startRoundBtn" class="btn btn-primary btn-large">
+          <span class="btn-icon">▶</span>
+          <span class="btn-text">Start Round</span>
+        </button>
+        <button id="revealCardsBtn" class="btn btn-accent btn-large hidden">
+          <span class="btn-icon">👁</span>
+          <span class="btn-text">Reveal Cards</span>
+        </button>
+        <button id="newRoundBtn" class="btn btn-secondary btn-large hidden">
+          <span class="btn-icon">🔄</span>
+          <span class="btn-text">New Round</span>
+        </button>
+        <button id="filterSimilarBtn" class="btn btn-outline btn-large hidden">
+          <span class="btn-icon">🎯</span>
+          <span class="btn-text">Focus Differences</span>
+        </button>
+      </div>
+      
+      <!-- Reveal overlay -->
+      <div id="revealOverlay" class="reveal-overlay hidden">
+        <div class="reveal-spotlight"></div>
+        <div id="revealCards" class="reveal-cards"></div>
+      </div>
+    </div>
+  </div>
+  
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

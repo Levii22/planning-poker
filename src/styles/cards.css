@@ -1,0 +1,230 @@
+/* Card Styles & Animations */
+
+/* Card Deck */
+.card-deck {
+    position: fixed;
+    bottom: 100px;
+    left: 50%;
+    transform: translateX(-50%);
+    text-align: center;
+    z-index: 20;
+    padding: var(--space-lg);
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-xl);
+    backdrop-filter: blur(20px);
+    box-shadow: var(--shadow-lg);
+}
+
+.card-deck.deck-enter {
+    animation: deckEnter 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes deckEnter {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(100px) scale(0.8);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0) scale(1);
+    }
+}
+
+.deck-label {
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+    margin-bottom: var(--space-md);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+.deck-cards {
+    display: flex;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: 700px;
+}
+
+/* Deck Card */
+.deck-card {
+    width: 56px;
+    height: 80px;
+    perspective: 600px;
+    cursor: pointer;
+    transition: transform var(--transition-fast);
+    animation: cardAppear 0.4s ease backwards;
+    animation-delay: calc(var(--card-index) * 30ms);
+}
+
+@keyframes cardAppear {
+    from {
+        opacity: 0;
+        transform: translateY(20px) rotateX(-20deg);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) rotateX(0);
+    }
+}
+
+.deck-card:hover {
+    transform: translateY(-8px) scale(1.1);
+}
+
+.deck-card.selected {
+    transform: translateY(-12px) scale(1.15);
+}
+
+.deck-card.selected .card-inner {
+    box-shadow: 0 0 20px var(--accent-glow), 0 0 40px var(--accent-glow);
+}
+
+.deck-card .card-inner {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    transition: all var(--transition-fast);
+    transform-style: preserve-3d;
+    border-radius: var(--radius-md);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
+
+.deck-card .card-front {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(145deg, #2a2f45, #1a1f35);
+    border: 2px solid var(--card-border);
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backface-visibility: hidden;
+}
+
+.deck-card .card-value {
+    font-size: var(--font-size-xl);
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.deck-card.selected .card-front {
+    border-color: var(--accent-primary);
+    background: linear-gradient(145deg, #3730a3, #312e81);
+}
+
+/* Player's Card on Table */
+.card-placeholder {
+    width: 50px;
+    height: 70px;
+    border: 2px dashed rgba(255, 255, 255, 0.2);
+    border-radius: var(--radius-sm);
+    position: relative;
+    transition: all var(--transition-base);
+}
+
+.card-placeholder.card-placed {
+    border-color: transparent;
+}
+
+/* Face-down card */
+.card {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    transform-style: preserve-3d;
+    transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.card.face-down {
+    transform: rotateY(180deg);
+}
+
+.card.revealed {
+    transform: rotateY(0deg);
+}
+
+.card .card-inner {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    transform-style: preserve-3d;
+}
+
+.card .card-front,
+.card .card-back {
+    position: absolute;
+    inset: 0;
+    border-radius: var(--radius-sm);
+    backface-visibility: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.card .card-front {
+    background: linear-gradient(145deg, #2a2f45, #1a1f35);
+    border: 2px solid var(--accent-primary);
+    box-shadow: 0 0 15px var(--accent-glow);
+}
+
+.card .card-front .card-value {
+    font-size: var(--font-size-lg);
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.card .card-back {
+    background: var(--card-back);
+    border: 2px solid rgba(139, 92, 246, 0.3);
+    transform: rotateY(180deg);
+    overflow: hidden;
+}
+
+.card .card-back::before {
+    content: '';
+    position: absolute;
+    inset: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+}
+
+.card .back-pattern {
+    font-size: 1.5rem;
+    opacity: 0.5;
+}
+
+/* Flying card animation */
+.flying-card {
+    animation: none !important;
+}
+
+.flying-card .card-inner {
+    transform-style: preserve-3d;
+}
+
+/* Card glow effects for revealed state */
+.card.revealed[data-value="?"],
+.card.revealed[data-value="☕"] {
+    filter: grayscale(0.5);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .card-deck {
+        bottom: 80px;
+        padding: var(--space-md);
+    }
+
+    .deck-card {
+        width: 44px;
+        height: 64px;
+    }
+
+    .deck-card .card-value {
+        font-size: var(--font-size-md);
+    }
+}
