@@ -48,6 +48,7 @@ class Game {
         wsClient.on('player_left', (msg) => this.onPlayerLeft(msg));
         wsClient.on('became_host', () => this.onBecameHost());
         wsClient.on('reveal_closed', () => this.onRevealClosed());
+        wsClient.on('host_transferred', (msg) => this.onHostTransferred(msg));
     }
 
     initialize(roomCode, playerId, isHost, roomState) {
@@ -83,9 +84,10 @@ class Game {
         this.players.forEach((player, index) => {
             const pos = positions[index];
             const isMe = player.id === this.playerId;
+            const canTransferHost = this.isHost && !isMe && !player.isHost;
 
             const playerEl = document.createElement('div');
-            playerEl.className = `player ${isMe ? 'is-me' : ''} ${player.hasSelected ? 'has-selected' : ''} ${player.isHost ? 'is-host' : ''}`;
+            playerEl.className = `player ${isMe ? 'is-me' : ''} ${player.hasSelected ? 'has-selected' : ''} ${player.isHost ? 'is-host' : ''} ${canTransferHost ? 'can-make-host' : ''}`;
             playerEl.dataset.playerId = player.id;
             playerEl.style.setProperty('--pos-x', `${pos.x}%`);
             playerEl.style.setProperty('--pos-y', `${pos.y}%`);
@@ -95,6 +97,7 @@ class Game {
         <div class="player-avatar">
           <span class="avatar-letter">${player.name.charAt(0).toUpperCase()}</span>
           ${player.isHost ? '<span class="host-badge">👑</span>' : ''}
+          ${canTransferHost ? '<button class="make-host-btn" title="Make host">👑</button>' : ''}
         </div>
         <div class="player-name">${player.name}${isMe ? ' (You)' : ''}</div>
         <div class="player-card-slot">
@@ -122,6 +125,15 @@ class Game {
         </div>
         ${player.hasSelected ? '<div class="selected-indicator">✓</div>' : ''}
       `;
+
+            // Add click handler for transfer host button
+            if (canTransferHost) {
+                const makeHostBtn = playerEl.querySelector('.make-host-btn');
+                makeHostBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.transferHost(player.id);
+                });
+            }
 
             container.appendChild(playerEl);
         });
@@ -404,6 +416,25 @@ class Game {
         this.isHost = true;
         this.elements.hostControls.classList.remove('hidden');
         this.updateUI();
+        this.renderPlayers(); // Re-render to show make host buttons
+    }
+
+    transferHost(playerId) {
+        if (!this.isHost) return;
+        wsClient.send('transfer_host', { playerId });
+    }
+
+    onHostTransferred(msg) {
+        // Check if I'm the new host
+        if (msg.newHostId === this.playerId) {
+            this.isHost = true;
+            this.elements.hostControls.classList.remove('hidden');
+        } else if (this.isHost) {
+            // I was the host but no longer am
+            this.isHost = false;
+            this.elements.hostControls.classList.add('hidden');
+        }
+        this.updateState(msg.roomState);
     }
 
     playRevealAnimation(revealOrder) {

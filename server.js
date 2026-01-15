@@ -1,6 +1,5 @@
 import { WebSocketServer } from 'ws';
 import { v4 as uuidv4 } from 'uuid';
-import crypto from 'crypto';
 
 // =============================================================================
 // SECURITY CONFIGURATION
@@ -27,9 +26,7 @@ const MAX_ROOMS = 1000;
 const MAX_PLAYERS_PER_ROOM = 50;
 const MAX_MESSAGE_SIZE = 1024; // 1KB max message size
 
-// Session tokens for reconnection (token -> player info)
-const sessionTokens = new Map();
-const SESSION_TOKEN_EXPIRY_MS = 30 * 60 * 1000; // 30 minutes
+
 
 // =============================================================================
 // WEBSOCKET SERVER WITH ORIGIN VERIFICATION
@@ -55,6 +52,28 @@ const wss = new WebSocketServer({
 
         callback(true);
     }
+});
+
+// =============================================================================
+// HEARTBEAT / KEEP-ALIVE
+// =============================================================================
+const HEARTBEAT_INTERVAL = 30000; // 30 seconds
+
+// Ping all clients periodically to keep connections alive
+const heartbeatInterval = setInterval(() => {
+    wss.clients.forEach((ws) => {
+        if (ws.isAlive === false) {
+            console.log('Terminating inactive client');
+            return ws.terminate();
+        }
+
+        ws.isAlive = false;
+        ws.ping(); // Send ping frame
+    });
+}, HEARTBEAT_INTERVAL);
+
+wss.on('close', () => {
+    clearInterval(heartbeatInterval);
 });
 
 // =============================================================================
@@ -107,23 +126,7 @@ function isValidRoomCode(code) {
     return /^[A-Z0-9]{4}$/.test(code.toUpperCase());
 }
 
-// Generate secure session token
-function generateSessionToken() {
-    return crypto.randomBytes(32).toString('hex');
-}
 
-// Clean up expired session tokens
-function cleanupExpiredSessions() {
-    const now = Date.now();
-    for (const [token, data] of sessionTokens.entries()) {
-        if (now - data.createdAt > SESSION_TOKEN_EXPIRY_MS) {
-            sessionTokens.delete(token);
-        }
-    }
-}
-
-// Run cleanup every 5 minutes
-setInterval(cleanupExpiredSessions, 5 * 60 * 1000);
 
 // =============================================================================
 // GAME STATE STORAGE
@@ -185,6 +188,11 @@ wss.on('connection', (ws, req) => {
     // Initialize rate limiting for this connection
     ws.messageTimestamps = [];
     ws.isAlive = true;
+
+    // Respond to server pings to keep connection alive
+    ws.on('pong', () => {
+        ws.isAlive = true;
+    });
 
     const clientIp = req.socket.remoteAddress;
     console.log(`New client connected from ${clientIp}`);
@@ -264,15 +272,13 @@ function handleMessage(ws, message) {
 
             const roomCode = generateRoomCode();
             const playerId = uuidv4();
-            const sessionToken = generateSessionToken();
 
             const player = {
                 id: playerId,
                 name,
                 isHost: true,
                 selectedCard: null,
-                roomCode,
-                sessionToken
+                roomCode
             };
 
             rooms.set(roomCode, {
@@ -283,19 +289,10 @@ function handleMessage(ws, message) {
 
             players.set(ws, player);
 
-            // Store session for reconnection
-            sessionTokens.set(sessionToken, {
-                playerId,
-                roomCode,
-                name,
-                createdAt: Date.now()
-            });
-
             ws.send(JSON.stringify({
                 type: 'room_created',
                 roomCode,
                 playerId,
-                sessionToken, // Send token for reconnection
                 roomState: getRoomState(roomCode)
             }));
 
@@ -331,33 +328,22 @@ function handleMessage(ws, message) {
             }
 
             const playerId = uuidv4();
-            const sessionToken = generateSessionToken();
 
             const player = {
                 id: playerId,
                 name,
                 isHost: false,
                 selectedCard: null,
-                roomCode,
-                sessionToken
+                roomCode
             };
 
             room.players.set(ws, player);
             players.set(ws, player);
 
-            // Store session for reconnection
-            sessionTokens.set(sessionToken, {
-                playerId,
-                roomCode,
-                name,
-                createdAt: Date.now()
-            });
-
             ws.send(JSON.stringify({
                 type: 'joined_room',
                 roomCode,
                 playerId,
-                sessionToken, // Send token for reconnection
                 roomState: getRoomState(roomCode)
             }));
 
@@ -476,6 +462,47 @@ function handleMessage(ws, message) {
             });
 
             console.log(`Reveal closed in room ${player.roomCode}`);
+            break;
+        }
+
+        case 'transfer_host': {
+            const player = players.get(ws);
+            if (!player || !player.isHost) return;
+
+            const targetPlayerId = message.playerId;
+            if (!targetPlayerId) return;
+
+            const room = rooms.get(player.roomCode);
+            if (!room) return;
+
+            // Find the target player's WebSocket
+            let targetWs = null;
+            let targetPlayer = null;
+            for (const [playerWs, p] of room.players.entries()) {
+                if (p.id === targetPlayerId) {
+                    targetWs = playerWs;
+                    targetPlayer = p;
+                    break;
+                }
+            }
+
+            if (!targetPlayer || targetPlayer.id === player.id) return;
+
+            // Transfer host
+            player.isHost = false;
+            targetPlayer.isHost = true;
+
+            // Notify the new host
+            targetWs.send(JSON.stringify({ type: 'became_host' }));
+
+            // Broadcast updated state to everyone
+            broadcastToRoom(player.roomCode, {
+                type: 'host_transferred',
+                newHostId: targetPlayerId,
+                roomState: getRoomState(player.roomCode)
+            });
+
+            console.log(`Host transferred from ${player.name} to ${targetPlayer.name} in room ${player.roomCode}`);
             break;
         }
     }

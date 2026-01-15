@@ -73,6 +73,37 @@
     filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
 }
 
+/* Make host button (appears on hover for other players when you're host) */
+.make-host-btn {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    font-size: 0.8rem;
+    width: 24px;
+    height: 24px;
+    border: none;
+    border-radius: 50%;
+    background: var(--bg-tertiary);
+    cursor: pointer;
+    opacity: 0;
+    transition: all var(--transition-fast);
+    filter: grayscale(1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.player.can-make-host:hover .make-host-btn {
+    opacity: 1;
+}
+
+.make-host-btn:hover {
+    filter: grayscale(0);
+    background: var(--accent-primary);
+    transform: scale(1.2);
+    box-shadow: 0 0 10px var(--accent-glow);
+}
+
 /* Current user highlight */
 .player.is-me .player-avatar {
     border-color: var(--accent-primary);
