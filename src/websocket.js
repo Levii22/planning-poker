@@ -4,7 +4,7 @@ class WebSocketClient {
         this.ws = null;
         this.handlers = new Map();
         this.reconnectAttempts = 0;
-        this.maxReconnectAttempts = 5;
+        this.maxReconnectAttempts = 15;
         this.sessionToken = null; // For secure reconnection
         this.playerId = null;
         this.roomCode = null;
