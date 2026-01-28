@@ -491,25 +491,24 @@ class Game {
                 cardsWrapper.appendChild(cardEl);
             });
 
-            // Trigger staggered flip animation with dramatic timing
             const cards = cardsWrapper.querySelectorAll('.reveal-card');
             cards.forEach((card, i) => {
                 // Spotlight on each card before flip
                 setTimeout(() => {
                     card.classList.add('spotlight');
-                }, 400 + i * 700);
+                }, 100 + i * 250);
 
                 // Flip the card
                 setTimeout(() => {
                     card.classList.add('revealed');
                     card.classList.add('flip-now');
                     // Add impact effect
-                    setTimeout(() => card.classList.add('impact'), 300);
-                }, 700 + i * 700);
+                    setTimeout(() => card.classList.add('impact'), 200);
+                }, 250 + i * 250);
             });
 
-            // Show summary and close button after all cards revealed
-            const summaryDelay = 700 + (revealOrder.length * 700) + 500;
+            const summaryDelay = 250 + (revealOrder.length * 250) + 500;
+
             setTimeout(() => {
                 // Calculate stats
                 const votes = revealOrder.filter(p => p.card !== null && p.card !== '?' && p.card !== '☕');
@@ -535,9 +534,8 @@ class Game {
 
             }, summaryDelay);
 
-        }, 1200);
+        }, 300);
 
-        // NO auto-close - host must click to close
     }
 
     hostCloseReveal() {
