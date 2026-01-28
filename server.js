@@ -180,6 +180,7 @@ function getRoomState(roomCode, includeVotes = false) {
         roomCode,
         state: room.state,
         players: playersList,
+        ignoreHostVote: room.ignoreHostVote || false,
         cardValues: CARD_VALUES
     };
 }
@@ -231,7 +232,13 @@ wss.on('connection', (ws, req) => {
                 if (player.isHost && room.players.size > 0) {
                     const [newHostWs, newHost] = room.players.entries().next().value;
                     newHost.isHost = true;
+                    room.hostWs = newHostWs;
                     newHostWs.send(JSON.stringify({ type: 'became_host' }));
+                }
+
+                // Update vote count if leaving player had voted
+                if (player.selectedCard !== null) {
+                    room.voteCount = Math.max(0, (room.voteCount || 0) - 1);
                 }
 
                 if (room.players.size === 0) {
@@ -284,6 +291,9 @@ function handleMessage(ws, message) {
             rooms.set(roomCode, {
                 state: 'waiting', // waiting, voting, revealed
                 players: new Map([[ws, player]]),
+                ignoreHostVote: false, // Default: host vote is counted
+                voteCount: 0,
+                hostWs: ws,
                 createdAt: Date.now()
             });
 
@@ -366,6 +376,7 @@ function handleMessage(ws, message) {
 
             // Reset all votes
             room.players.forEach(p => p.selectedCard = null);
+            room.voteCount = 0;
             room.state = 'voting';
 
             broadcastToRoom(player.roomCode, {
@@ -374,6 +385,27 @@ function handleMessage(ws, message) {
             });
 
             console.log(`Round started in room ${player.roomCode}`);
+            break;
+        }
+
+        case 'toggle_host_mode': {
+            const player = players.get(ws);
+            if (!player || !player.isHost) return;
+
+            const room = rooms.get(player.roomCode);
+            if (!room) return;
+
+            // Toggle the setting
+            room.ignoreHostVote = !room.ignoreHostVote;
+
+            // Broadcast update
+            broadcastToRoom(player.roomCode, {
+                type: 'host_mode_toggled',
+                ignoreHostVote: room.ignoreHostVote,
+                roomState: getRoomState(player.roomCode)
+            });
+
+            console.log(`Host mode toggled in room ${player.roomCode}: ${room.ignoreHostVote}`);
             break;
         }
 
@@ -393,6 +425,10 @@ function handleMessage(ws, message) {
                 return;
             }
 
+            // Update vote count if this is a new vote
+            if (player.selectedCard === null) {
+                room.voteCount = (room.voteCount || 0) + 1;
+            }
             player.selectedCard = message.card;
 
             broadcastToRoom(player.roomCode, {
@@ -402,6 +438,52 @@ function handleMessage(ws, message) {
             });
 
             console.log(`${player.name} selected a card in room ${player.roomCode}`);
+
+            // Check if we should auto-reveal (Optimized O(1))
+            const totalPlayers = room.players.size;
+            let requiredVoters = totalPlayers;
+            let currentVoters = room.voteCount;
+
+            // Adjust for host opt-out
+            if (room.ignoreHostVote) {
+                // Determine if host exists and has voted
+                // (Host should exist if room exists, but safe check)
+                const hostPlayer = room.hostWs ? room.players.get(room.hostWs) : null;
+
+                if (hostPlayer) {
+                    requiredVoters--; // Host doesn't need to vote
+
+                    if (hostPlayer.selectedCard !== null) {
+                        // If host DID vote, they are included in currentVoters,
+                        // so we must exclude them to check if *others* finished.
+                        currentVoters--;
+                    }
+                }
+            }
+
+            // If everyone needed has voted, auto-reveal
+            if (requiredVoters > 0 && currentVoters >= requiredVoters) {
+                console.log(`Auto-revealing in room ${player.roomCode} (votes: ${room.voteCount}/${totalPlayers}, ignoreHost: ${room.ignoreHostVote})`);
+
+                // Trigger reveal logic
+                room.state = 'revealed';
+
+                // Build reveal order
+                const revealOrder = [];
+                room.players.forEach((p) => {
+                    revealOrder.push({
+                        id: p.id,
+                        name: p.name,
+                        card: p.selectedCard
+                    });
+                });
+
+                broadcastToRoom(player.roomCode, {
+                    type: 'cards_revealed',
+                    revealOrder,
+                    roomState: getRoomState(player.roomCode, true)
+                });
+            }
             break;
         }
 
@@ -442,6 +524,7 @@ function handleMessage(ws, message) {
             if (!room) return;
 
             room.players.forEach(p => p.selectedCard = null);
+            room.voteCount = 0;
             room.state = 'waiting';
 
             broadcastToRoom(player.roomCode, {
@@ -491,6 +574,7 @@ function handleMessage(ws, message) {
             // Transfer host
             player.isHost = false;
             targetPlayer.isHost = true;
+            room.hostWs = targetWs;
 
             // Notify the new host
             targetWs.send(JSON.stringify({ type: 'became_host' }));

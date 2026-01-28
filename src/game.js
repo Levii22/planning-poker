@@ -26,7 +26,8 @@ class Game {
             revealOverlay: document.getElementById('revealOverlay'),
             revealCards: document.getElementById('revealCards'),
             roomCodeDisplay: document.getElementById('roomCodeDisplay'),
-            copyRoomCode: document.getElementById('copyRoomCode')
+            copyRoomCode: document.getElementById('copyRoomCode'),
+            hostModeToggle: document.getElementById('hostModeToggle')
         };
 
         this.bindEvents();
@@ -38,6 +39,7 @@ class Game {
         this.elements.newRoundBtn.addEventListener('click', () => this.newRound());
         this.elements.filterSimilarBtn.addEventListener('click', () => this.toggleFilter());
         this.elements.copyRoomCode.addEventListener('click', () => this.copyRoomCode());
+        this.elements.hostModeToggle.addEventListener('click', () => this.toggleHostMode());
 
         // WebSocket handlers
         wsClient.on('round_started', (msg) => this.onRoundStarted(msg));
@@ -49,6 +51,7 @@ class Game {
         wsClient.on('became_host', () => this.onBecameHost());
         wsClient.on('reveal_closed', () => this.onRevealClosed());
         wsClient.on('host_transferred', (msg) => this.onHostTransferred(msg));
+        wsClient.on('host_mode_toggled', (msg) => this.onHostModeToggled(msg));
     }
 
     initialize(roomCode, playerId, isHost, roomState) {
@@ -61,6 +64,11 @@ class Game {
 
         if (isHost) {
             this.elements.hostControls.classList.remove('hidden');
+        }
+
+        // Initialize host mode state if present
+        if (roomState.ignoreHostVote !== undefined) {
+            this.updateHostModeUI(roomState.ignoreHostVote);
         }
 
         this.updateState(roomState);
@@ -273,6 +281,25 @@ class Game {
             this.elements.revealCardsBtn.classList.toggle('hidden', this.gameState !== 'voting');
             this.elements.newRoundBtn.classList.toggle('hidden', this.gameState !== 'revealed');
             this.elements.filterSimilarBtn.classList.toggle('hidden', this.gameState !== 'revealed');
+            this.elements.hostModeToggle.classList.remove('hidden');
+        } else {
+            this.elements.hostModeToggle.classList.add('hidden');
+        }
+
+        if (this.gameState === 'revealed' && this.elements.revealOverlay.classList.contains('active')) {
+            const container = this.elements.revealCards;
+            const existingBtn = container.querySelector('.reveal-close-btn');
+
+            if (this.isHost && !existingBtn) {
+                const closeBtn = document.createElement('button');
+                closeBtn.className = 'reveal-close-btn';
+                closeBtn.innerHTML = '✓ Continue to Discussion';
+                closeBtn.addEventListener('click', () => this.hostCloseReveal());
+
+                container.appendChild(closeBtn);
+            } else if (!this.isHost && existingBtn) {
+                existingBtn.remove();
+            }
         }
     }
 
@@ -302,6 +329,26 @@ class Game {
             this.highlightDifferences();
         } else {
             this.clearHighlights();
+        }
+    }
+
+    toggleHostMode() {
+        if (!this.isHost) return;
+        wsClient.send('toggle_host_mode');
+    }
+
+    onHostModeToggled(msg) {
+        this.updateHostModeUI(msg.ignoreHostVote);
+        this.updateState(msg.roomState);
+    }
+
+    updateHostModeUI(isIgnoring) {
+        if (isIgnoring) {
+            this.elements.hostModeToggle.classList.add('mode-active');
+            this.elements.hostModeToggle.querySelector('.btn-text').textContent = 'Ignore my vote (ON)';
+        } else {
+            this.elements.hostModeToggle.classList.remove('mode-active');
+            this.elements.hostModeToggle.querySelector('.btn-text').textContent = 'Ignore my vote';
         }
     }
 
