@@ -37,6 +37,13 @@ function updateConnectionStatus(status) {
 async function init() {
   updateConnectionStatus('connecting');
 
+  const urlParams = new URLSearchParams(window.location.search);
+  const room = urlParams.get('room');
+  if (room) {
+    roomCodeInput.value = room.toUpperCase();
+    setTimeout(() => playerNameInput.focus(), 100);
+  }
+
   try {
     await wsClient.connect();
     isConnected = true;
@@ -151,6 +158,10 @@ function switchToGame(roomCode, playerId, isHost, roomState) {
   lobbyView.classList.add('hidden');
   gameView.classList.add('active');
   gameView.classList.remove('hidden');
+
+  const url = new URL(window.location.href);
+  url.searchParams.set('room', roomCode);
+  window.history.replaceState({}, '', url);
 
   // Initialize game
   game.initialize(roomCode, playerId, isHost, roomState);

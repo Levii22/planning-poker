@@ -185,6 +185,26 @@ function getRoomState(roomCode, includeVotes = false) {
     };
 }
 
+// Get sorted list of players for reveal
+function getSortedRevealOrder(room) {
+    const revealOrder = [];
+    room.players.forEach((p) => {
+        revealOrder.push({
+            id: p.id,
+            name: p.name,
+            card: p.selectedCard
+        });
+    });
+
+    revealOrder.sort((a, b) => {
+        const aVal = a.card === null ? -1000 : CARD_VALUES.indexOf(a.card);
+        const bVal = b.card === null ? -1000 : CARD_VALUES.indexOf(b.card);
+        return bVal - aVal;
+    });
+
+    return revealOrder;
+}
+
 wss.on('connection', (ws, req) => {
     // Initialize rate limiting for this connection
     ws.messageTimestamps = [];
@@ -195,7 +215,13 @@ wss.on('connection', (ws, req) => {
         ws.isAlive = true;
     });
 
-    const clientIp = req.socket.remoteAddress;
+    // Determine client IP, prioritizing proxy headers if behind Nginx/etc.
+    const forwardedFor = req.headers['x-forwarded-for'];
+    const realIp = req.headers['x-real-ip'];
+    const clientIp = (forwardedFor ? forwardedFor.split(',')[0].trim() : null) 
+                  || realIp 
+                  || req.socket.remoteAddress;
+                  
     console.log(`New client connected from ${clientIp}`);
 
     ws.on('message', (data) => {
@@ -254,7 +280,7 @@ wss.on('connection', (ws, req) => {
             }
             players.delete(ws);
         }
-        console.log('Client disconnected');
+        console.log(`Player ${player?.name} disconnected`);
     });
 });
 
@@ -468,15 +494,8 @@ function handleMessage(ws, message) {
                 // Trigger reveal logic
                 room.state = 'revealed';
 
-                // Build reveal order
-                const revealOrder = [];
-                room.players.forEach((p) => {
-                    revealOrder.push({
-                        id: p.id,
-                        name: p.name,
-                        card: p.selectedCard
-                    });
-                });
+                // Build and sort reveal order
+                const revealOrder = getSortedRevealOrder(room);
 
                 broadcastToRoom(player.roomCode, {
                     type: 'cards_revealed',
@@ -496,15 +515,8 @@ function handleMessage(ws, message) {
 
             room.state = 'revealed';
 
-            // Build reveal order (for animation sequencing)
-            const revealOrder = [];
-            room.players.forEach((p) => {
-                revealOrder.push({
-                    id: p.id,
-                    name: p.name,
-                    card: p.selectedCard
-                });
-            });
+            // Build and sort reveal order (for animation sequencing)
+            const revealOrder = getSortedRevealOrder(room);
 
             broadcastToRoom(player.roomCode, {
                 type: 'cards_revealed',

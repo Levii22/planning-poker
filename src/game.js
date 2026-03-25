@@ -387,7 +387,9 @@ class Game {
     }
 
     copyRoomCode() {
-        navigator.clipboard.writeText(this.roomCode).then(() => {
+        const url = new URL(window.location.href);
+        url.searchParams.set('room', this.roomCode);
+        navigator.clipboard.writeText(url.toString()).then(() => {
             this.elements.copyRoomCode.textContent = '✓';
             setTimeout(() => {
                 this.elements.copyRoomCode.textContent = '📋';
