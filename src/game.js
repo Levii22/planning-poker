@@ -52,6 +52,8 @@ class Game {
         wsClient.on('reveal_closed', () => this.onRevealClosed());
         wsClient.on('host_transferred', (msg) => this.onHostTransferred(msg));
         wsClient.on('host_mode_toggled', (msg) => this.onHostModeToggled(msg));
+        wsClient.on('player_disconnected', (msg) => this.onPlayerDisconnected(msg));
+        wsClient.on('player_reconnected', (msg) => this.onPlayerReconnected(msg));
     }
 
     initialize(roomCode, playerId, isHost, roomState) {
@@ -95,15 +97,15 @@ class Game {
             const canTransferHost = this.isHost && !isMe && !player.isHost;
 
             const playerEl = document.createElement('div');
-            playerEl.className = `player ${isMe ? 'is-me' : ''} ${player.hasSelected ? 'has-selected' : ''} ${player.isHost ? 'is-host' : ''} ${canTransferHost ? 'can-make-host' : ''}`;
+            playerEl.className = `player ${isMe ? 'is-me' : ''} ${player.hasSelected ? 'has-selected' : ''} ${player.isHost ? 'is-host' : ''} ${canTransferHost ? 'can-make-host' : ''} ${!player.active ? 'is-offline' : ''}`;
             playerEl.dataset.playerId = player.id;
             playerEl.style.setProperty('--pos-x', `${pos.x}%`);
             playerEl.style.setProperty('--pos-y', `${pos.y}%`);
             playerEl.style.setProperty('--angle', `${pos.angle}deg`);
 
             playerEl.innerHTML = `
-        <div class="player-avatar">
-          <span class="avatar-letter">${player.name.charAt(0).toUpperCase()}</span>
+        <div class="player-avatar" style="background: ${player.color || 'var(--color-primary)'}">
+          <span class="avatar-emoji">${player.avatar || '👤'}</span>
           ${player.isHost ? '<span class="host-badge">👑</span>' : ''}
           ${canTransferHost ? '<button class="make-host-btn" title="Make host">👑</button>' : ''}
         </div>
@@ -605,6 +607,14 @@ class Game {
             overlay.classList.add('hidden');
             overlay.classList.remove('fade-out', 'active');
         }, 600);
+    }
+
+    onPlayerDisconnected(msg) {
+        this.updateState(msg.roomState);
+    }
+
+    onPlayerReconnected(msg) {
+        this.updateState(msg.roomState);
     }
 }
 

@@ -133,6 +133,7 @@ function isValidRoomCode(code) {
 // =============================================================================
 const rooms = new Map();
 const players = new Map(); // Map WebSocket to player info
+const disconnectTimeouts = new Map(); // Map playerId -> setTimeout ID
 
 // Generate 4-character room code
 function generateRoomCode() {
@@ -147,15 +148,33 @@ function generateRoomCode() {
 // Card values for Planning Poker
 const CARD_VALUES = ['0', '½', '1', '2', '3', '5', '8', '13', '21', '?', '☕'];
 
+const AVATAR_EMOJIS = ['🐱', '🐶', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐸', '🐵', '🦄', '🦖', '🐙', '🐳', '🦥', '🦘', '🦉', '🦔', '🦆', '🦖', '🐝', '🐧', '🦁', '🦭'];
+const AVATAR_GRADIENTS = [
+    'linear-gradient(135deg, #4f46e5, #312e81)', // Deep Purple/Indigo
+    'linear-gradient(135deg, #ea580c, #991b1b)', // Sunset/Rust
+    'linear-gradient(135deg, #059669, #0f766e)', // Emerald/Teal
+    'linear-gradient(135deg, #db2777, #9f1239)', // Velvet Rose/Plum
+    'linear-gradient(135deg, #0891b2, #0284c7)', // Ocean Cyan
+    'linear-gradient(135deg, #7c3aed, #5b21b6)', // Royal Purple/Violet
+    'linear-gradient(135deg, #d97706, #9a3412)', // Autumn Amber
+    'linear-gradient(135deg, #be123c, #5b21b6)'  // Crimson Dusk
+];
+
+function getRandomPlayerAvatar() {
+    const emoji = AVATAR_EMOJIS[Math.floor(Math.random() * AVATAR_EMOJIS.length)];
+    const gradient = AVATAR_GRADIENTS[Math.floor(Math.random() * AVATAR_GRADIENTS.length)];
+    return { emoji, gradient };
+}
+
 // Broadcast to all players in a room
 function broadcastToRoom(roomCode, message, excludeWs = null) {
     const room = rooms.get(roomCode);
     if (!room) return;
 
     const data = JSON.stringify(message);
-    room.players.forEach((player, ws) => {
-        if (ws !== excludeWs && ws.readyState === 1) {
-            ws.send(data);
+    room.players.forEach((player) => {
+        if (player.ws && player.ws !== excludeWs && player.ws.readyState === 1) {
+            player.ws.send(data);
         }
     });
 }
@@ -166,13 +185,16 @@ function getRoomState(roomCode, includeVotes = false) {
     if (!room) return null;
 
     const playersList = [];
-    room.players.forEach((player, ws) => {
+    room.players.forEach((player) => {
         playersList.push({
             id: player.id,
             name: player.name,
             isHost: player.isHost,
             hasSelected: player.selectedCard !== null,
-            card: includeVotes || room.state === 'revealed' ? player.selectedCard : null
+            card: includeVotes || room.state === 'revealed' ? player.selectedCard : null,
+            active: player.ws !== null,
+            avatar: player.avatar,
+            color: player.color
         });
     });
 
@@ -250,37 +272,79 @@ wss.on('connection', (ws, req) => {
     ws.on('close', () => {
         const player = players.get(ws);
         if (player) {
+            players.delete(ws); // Remove connection mapping
+
             const room = rooms.get(player.roomCode);
             if (room) {
-                room.players.delete(ws);
+                // Mark player as disconnected
+                player.ws = null;
 
-                // If host left, assign new host or close room
-                if (player.isHost && room.players.size > 0) {
-                    const [newHostWs, newHost] = room.players.entries().next().value;
-                    newHost.isHost = true;
-                    room.hostWs = newHostWs;
-                    newHostWs.send(JSON.stringify({ type: 'became_host' }));
-                }
+                // Broadcast updated room state to show player is offline
+                broadcastToRoom(player.roomCode, {
+                    type: 'player_disconnected',
+                    playerId: player.id,
+                    roomState: getRoomState(player.roomCode)
+                });
 
-                // Update vote count if leaving player had voted
-                if (player.selectedCard !== null) {
-                    room.voteCount = Math.max(0, (room.voteCount || 0) - 1);
-                }
+                // Start grace period timer
+                const GRACE_PERIOD = 20000; // 20 seconds
+                const timeoutId = setTimeout(() => {
+                    disconnectTimeouts.delete(player.id);
 
-                if (room.players.size === 0) {
-                    rooms.delete(player.roomCode);
-                    console.log(`Room ${player.roomCode} deleted - no players`);
-                } else {
-                    broadcastToRoom(player.roomCode, {
-                        type: 'player_left',
-                        playerId: player.id,
-                        roomState: getRoomState(player.roomCode)
-                    });
-                }
+                    const currentRoom = rooms.get(player.roomCode);
+                    if (currentRoom) {
+                        const currentPlayer = currentRoom.players.get(player.id);
+                        // Only clean up if they haven't reconnected (ws is still null)
+                        if (currentPlayer && currentPlayer.ws === null) {
+                            currentRoom.players.delete(player.id);
+
+                            if (currentPlayer.selectedCard !== null) {
+                                currentRoom.voteCount = Math.max(0, (currentRoom.voteCount || 0) - 1);
+                            }
+
+                            // If host left, assign new host or close room
+                            if (currentPlayer.isHost && currentRoom.players.size > 0) {
+                                // Find first active player
+                                let newHost = null;
+                                for (const p of currentRoom.players.values()) {
+                                    if (p.ws !== null) {
+                                        newHost = p;
+                                        break;
+                                    }
+                                }
+                                // Fallback to any player
+                                if (!newHost) {
+                                    newHost = currentRoom.players.values().next().value;
+                                }
+                                if (newHost) {
+                                    newHost.isHost = true;
+                                    currentRoom.hostId = newHost.id;
+                                    if (newHost.ws && newHost.ws.readyState === 1) {
+                                        newHost.ws.send(JSON.stringify({ type: 'became_host' }));
+                                    }
+                                }
+                            }
+
+                            if (currentRoom.players.size === 0) {
+                                rooms.delete(player.roomCode);
+                                console.log(`Room ${player.roomCode} deleted - no players after grace period`);
+                            } else {
+                                broadcastToRoom(player.roomCode, {
+                                    type: 'player_left',
+                                    playerId: player.id,
+                                    roomState: getRoomState(player.roomCode)
+                                });
+                            }
+                        }
+                    }
+                }, GRACE_PERIOD);
+
+                disconnectTimeouts.set(player.id, timeoutId);
             }
-            players.delete(ws);
+            console.log(`Player ${player.name} disconnected (entering grace period)`);
+        } else {
+            console.log('Anonymous client disconnected');
         }
-        console.log(`Player ${player?.name} disconnected`);
     });
 });
 
@@ -305,21 +369,27 @@ function handleMessage(ws, message) {
 
             const roomCode = generateRoomCode();
             const playerId = uuidv4();
+            const sessionToken = uuidv4();
 
+            const avatarInfo = getRandomPlayerAvatar();
             const player = {
                 id: playerId,
                 name,
                 isHost: true,
                 selectedCard: null,
-                roomCode
+                roomCode,
+                ws,
+                sessionToken,
+                avatar: avatarInfo.emoji,
+                color: avatarInfo.gradient
             };
 
             rooms.set(roomCode, {
                 state: 'waiting', // waiting, voting, revealed
-                players: new Map([[ws, player]]),
+                players: new Map([[playerId, player]]),
                 ignoreHostVote: false, // Default: host vote is counted
                 voteCount: 0,
-                hostWs: ws,
+                hostId: playerId,
                 createdAt: Date.now()
             });
 
@@ -329,6 +399,7 @@ function handleMessage(ws, message) {
                 type: 'room_created',
                 roomCode,
                 playerId,
+                sessionToken,
                 roomState: getRoomState(roomCode)
             }));
 
@@ -364,22 +435,29 @@ function handleMessage(ws, message) {
             }
 
             const playerId = uuidv4();
+            const sessionToken = uuidv4();
 
+            const avatarInfo = getRandomPlayerAvatar();
             const player = {
                 id: playerId,
                 name,
                 isHost: false,
                 selectedCard: null,
-                roomCode
+                roomCode,
+                ws,
+                sessionToken,
+                avatar: avatarInfo.emoji,
+                color: avatarInfo.gradient
             };
 
-            room.players.set(ws, player);
+            room.players.set(playerId, player);
             players.set(ws, player);
 
             ws.send(JSON.stringify({
                 type: 'joined_room',
                 roomCode,
                 playerId,
+                sessionToken,
                 roomState: getRoomState(roomCode)
             }));
 
@@ -465,31 +543,40 @@ function handleMessage(ws, message) {
 
             console.log(`${player.name} selected a card in room ${player.roomCode}`);
 
-            // Check if we should auto-reveal (Optimized O(1))
-            const totalPlayers = room.players.size;
-            let requiredVoters = totalPlayers;
-            let currentVoters = room.voteCount;
+            // Check if we should auto-reveal (excluding inactive players and counting correctly)
+            let activeVotersCount = 0;
+            let activePlayersCount = 0;
+            let activeHostVoted = false;
+            let activeHostExists = false;
 
-            // Adjust for host opt-out
-            if (room.ignoreHostVote) {
-                // Determine if host exists and has voted
-                // (Host should exist if room exists, but safe check)
-                const hostPlayer = room.hostWs ? room.players.get(room.hostWs) : null;
-
-                if (hostPlayer) {
-                    requiredVoters--; // Host doesn't need to vote
-
-                    if (hostPlayer.selectedCard !== null) {
-                        // If host DID vote, they are included in currentVoters,
-                        // so we must exclude them to check if *others* finished.
-                        currentVoters--;
+            room.players.forEach((p) => {
+                if (p.ws !== null) {
+                    activePlayersCount++;
+                    if (p.selectedCard !== null) {
+                        activeVotersCount++;
                     }
+                    if (p.isHost) {
+                        activeHostExists = true;
+                        if (p.selectedCard !== null) {
+                            activeHostVoted = true;
+                        }
+                    }
+                }
+            });
+
+            let requiredVoters = activePlayersCount;
+            let currentVoters = activeVotersCount;
+
+            if (room.ignoreHostVote && activeHostExists) {
+                requiredVoters--;
+                if (activeHostVoted) {
+                    currentVoters--;
                 }
             }
 
-            // If everyone needed has voted, auto-reveal
+            // If everyone active and needed has voted, auto-reveal
             if (requiredVoters > 0 && currentVoters >= requiredVoters) {
-                console.log(`Auto-revealing in room ${player.roomCode} (votes: ${room.voteCount}/${totalPlayers}, ignoreHost: ${room.ignoreHostVote})`);
+                console.log(`Auto-revealing in room ${player.roomCode} (votes: ${room.voteCount}/${activePlayersCount}, ignoreHost: ${room.ignoreHostVote})`);
 
                 // Trigger reveal logic
                 room.state = 'revealed';
@@ -570,26 +657,18 @@ function handleMessage(ws, message) {
             const room = rooms.get(player.roomCode);
             if (!room) return;
 
-            // Find the target player's WebSocket
-            let targetWs = null;
-            let targetPlayer = null;
-            for (const [playerWs, p] of room.players.entries()) {
-                if (p.id === targetPlayerId) {
-                    targetWs = playerWs;
-                    targetPlayer = p;
-                    break;
-                }
-            }
-
+            const targetPlayer = room.players.get(targetPlayerId);
             if (!targetPlayer || targetPlayer.id === player.id) return;
 
             // Transfer host
             player.isHost = false;
             targetPlayer.isHost = true;
-            room.hostWs = targetWs;
+            room.hostId = targetPlayerId;
 
             // Notify the new host
-            targetWs.send(JSON.stringify({ type: 'became_host' }));
+            if (targetPlayer.ws && targetPlayer.ws.readyState === 1) {
+                targetPlayer.ws.send(JSON.stringify({ type: 'became_host' }));
+            }
 
             // Broadcast updated state to everyone
             broadcastToRoom(player.roomCode, {
@@ -599,6 +678,124 @@ function handleMessage(ws, message) {
             });
 
             console.log(`Host transferred from ${player.name} to ${targetPlayer.name} in room ${player.roomCode}`);
+            break;
+        }
+
+        case 'rejoin': {
+            const { playerId, roomCode, sessionToken } = message;
+
+            if (!playerId || !roomCode || !sessionToken) {
+                ws.send(JSON.stringify({
+                    type: 'session_expired',
+                    message: 'Session details missing.'
+                }));
+                return;
+            }
+
+            const room = rooms.get(roomCode);
+            if (!room) {
+                ws.send(JSON.stringify({
+                    type: 'session_expired',
+                    message: 'Room not found.'
+                }));
+                return;
+            }
+
+            const player = room.players.get(playerId);
+            if (!player || player.sessionToken !== sessionToken) {
+                ws.send(JSON.stringify({
+                    type: 'session_expired',
+                    message: 'Session invalid or expired.'
+                }));
+                return;
+            }
+
+            // Clear any active disconnect timeout for this player
+            if (disconnectTimeouts.has(playerId)) {
+                clearTimeout(disconnectTimeouts.get(playerId));
+                disconnectTimeouts.delete(playerId);
+            }
+
+            // If the player had an existing active connection (e.g. duplicate tab), close it
+            if (player.ws && player.ws !== ws) {
+                try {
+                    player.ws.close(1000, 'Replaced by new connection');
+                } catch (e) {
+                    console.error('Error closing old player socket:', e);
+                }
+            }
+
+            // Re-associate player with the new WebSocket
+            player.ws = ws;
+
+            // Set the reverse mapping for message lookup
+            players.set(ws, player);
+
+            // Send rejoin confirmation
+            ws.send(JSON.stringify({
+                type: 'rejoined_room',
+                roomCode,
+                playerId,
+                isHost: player.isHost,
+                roomState: getRoomState(roomCode)
+            }));
+
+            // Broadcast that the player is back online
+            broadcastToRoom(roomCode, {
+                type: 'player_reconnected',
+                playerId: player.id,
+                roomState: getRoomState(roomCode)
+            }, ws);
+
+            console.log(`Player ${player.name} reconnected to room ${roomCode}`);
+            break;
+        }
+
+        case 'leave': {
+            const player = players.get(ws);
+            if (player) {
+                const room = rooms.get(player.roomCode);
+                if (room) {
+                    room.players.delete(player.id);
+
+                    if (player.selectedCard !== null) {
+                        room.voteCount = Math.max(0, (room.voteCount || 0) - 1);
+                    }
+
+                    // If host left, assign new host or close room
+                    if (player.isHost && room.players.size > 0) {
+                        let newHost = null;
+                        for (const p of room.players.values()) {
+                            if (p.ws !== null) {
+                                newHost = p;
+                                break;
+                            }
+                        }
+                        if (!newHost) {
+                            newHost = room.players.values().next().value;
+                        }
+                        if (newHost) {
+                            newHost.isHost = true;
+                            room.hostId = newHost.id;
+                            if (newHost.ws && newHost.ws.readyState === 1) {
+                                newHost.ws.send(JSON.stringify({ type: 'became_host' }));
+                            }
+                        }
+                    }
+
+                    if (room.players.size === 0) {
+                        rooms.delete(player.roomCode);
+                        console.log(`Room ${player.roomCode} deleted - player voluntarily left`);
+                    } else {
+                        broadcastToRoom(player.roomCode, {
+                            type: 'player_left',
+                            playerId: player.id,
+                            roomState: getRoomState(player.roomCode)
+                        });
+                    }
+                }
+                players.delete(ws);
+            }
             break;
         }
     }
