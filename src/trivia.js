@@ -26,7 +26,14 @@ export const AGILE_JOKES = [
     "Programming is like magic, except we wave a keyboard instead of a wand and the spells are full of bugs.",
     "What do developers do when they're cold? They stand in the corner. It's usually 90 degrees.",
     "Why did the database administrator leave the restaurant? Because of table locking.",
-    "What is a programmer's favorite hangout spot? Foo Bar."
+    "What is a programmer's favorite hangout spot? Foo Bar.",
+    "A QA engineer walks into a bar. Orders a beer. Orders 0 beers. Orders 999999999 beers. Orders a lizard. Orders -1 beers. Orders a sfdeljkfhwue.",
+    "How many QA engineers does it take to change a lightbulb? None, they just report that the room is dark.",
+    "Why did the QA engineer cross the road? To test the parameters of the other side.",
+    "Developer: 'It works on my machine!' QA: 'We are not shipping your machine.'",
+    "99 little bugs in the code, 99 little bugs. Take one down, patch it around, 127 little bugs in the code.",
+    "QA: 'I found a bug.' Developer: 'That's not a bug, it's an undocumented design feature.'",
+    "Why did the testing engineer get fired? Because they kept breaking all the rules."
 ];
 
 export class TriviaTicker {
