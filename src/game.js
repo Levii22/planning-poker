@@ -39,7 +39,6 @@ class Game {
         this.elements.startRoundBtn.addEventListener('click', () => this.startRound());
         this.elements.revealCardsBtn.addEventListener('click', () => this.revealCards());
         this.elements.newRoundBtn.addEventListener('click', () => this.newRound());
-        this.elements.filterSimilarBtn.addEventListener('click', () => this.toggleFilter());
         this.elements.copyRoomCode.addEventListener('click', () => this.copyRoomCode());
         this.elements.hostModeToggle.addEventListener('click', () => this.toggleHostMode());
 
@@ -299,7 +298,6 @@ class Game {
             this.elements.startRoundBtn.classList.toggle('hidden', this.gameState !== 'waiting');
             this.elements.revealCardsBtn.classList.toggle('hidden', this.gameState !== 'voting');
             this.elements.newRoundBtn.classList.toggle('hidden', this.gameState !== 'revealed');
-            this.elements.filterSimilarBtn.classList.toggle('hidden', this.gameState !== 'revealed');
             this.elements.hostModeToggle.classList.remove('hidden');
         } else {
             this.elements.hostModeToggle.classList.add('hidden');
@@ -332,7 +330,6 @@ class Game {
     }
 
     newRound() {
-        this.filterActive = false;
         this.selectedCard = null;
         this.elements.deckCards.querySelectorAll('.deck-card').forEach(c => {
             c.classList.remove('selected');
@@ -340,16 +337,6 @@ class Game {
         wsClient.send('reset_round');
     }
 
-    toggleFilter() {
-        this.filterActive = !this.filterActive;
-        this.elements.filterSimilarBtn.classList.toggle('active', this.filterActive);
-
-        if (this.filterActive) {
-            this.highlightDifferences();
-        } else {
-            this.clearHighlights();
-        }
-    }
 
     toggleHostMode() {
         if (!this.isHost) return;
@@ -371,39 +358,6 @@ class Game {
         }
     }
 
-    highlightDifferences() {
-        // Find the most common value
-        const valueCounts = {};
-        this.players.forEach(p => {
-            if (p.card !== null && p.card !== '?' && p.card !== '☕') {
-                valueCounts[p.card] = (valueCounts[p.card] || 0) + 1;
-            }
-        });
-
-        const mostCommon = Object.entries(valueCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
-
-        // Highlight players with different values
-        this.elements.playersContainer.querySelectorAll('.player').forEach(playerEl => {
-            const playerId = playerEl.dataset.playerId;
-            const player = this.players.find(p => p.id === playerId);
-
-            if (player && player.card !== null) {
-                if (player.card === mostCommon) {
-                    playerEl.classList.add('faded');
-                    playerEl.classList.remove('highlighted');
-                } else {
-                    playerEl.classList.add('highlighted');
-                    playerEl.classList.remove('faded');
-                }
-            }
-        });
-    }
-
-    clearHighlights() {
-        this.elements.playersContainer.querySelectorAll('.player').forEach(playerEl => {
-            playerEl.classList.remove('faded', 'highlighted');
-        });
-    }
 
     copyRoomCode() {
         const url = new URL(window.location.href);
@@ -419,7 +373,6 @@ class Game {
     // WebSocket event handlers
     onRoundStarted(msg) {
         this.selectedCard = null;
-        this.filterActive = false;
 
         // Clear any previously selected cards in the deck
         this.elements.deckCards.querySelectorAll('.deck-card').forEach(c => {
@@ -451,8 +404,6 @@ class Game {
 
     onRoundReset(msg) {
         this.selectedCard = null;
-        this.filterActive = false;
-        this.clearHighlights();
         this.updateState(msg.roomState);
     }
 
