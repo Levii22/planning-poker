@@ -1,5 +1,7 @@
 // Game rendering and animation control
 import { wsClient } from './websocket.js';
+import { TriviaTicker } from './trivia.js';
+import { triggerConfetti } from './confetti.js';
 
 class Game {
     constructor() {
@@ -10,7 +12,7 @@ class Game {
         this.selectedCard = null;
         this.gameState = 'waiting';
         this.cardValues = [];
-        this.filterActive = false;
+        this.triviaTicker = new TriviaTicker('triviaTicker');
 
         this.elements = {
             playersContainer: document.getElementById('playersContainer'),
@@ -20,14 +22,14 @@ class Game {
             startRoundBtn: document.getElementById('startRoundBtn'),
             revealCardsBtn: document.getElementById('revealCardsBtn'),
             newRoundBtn: document.getElementById('newRoundBtn'),
-            filterSimilarBtn: document.getElementById('filterSimilarBtn'),
             tableCenter: document.getElementById('tableCenter'),
             gameStatus: document.getElementById('gameStatus'),
             revealOverlay: document.getElementById('revealOverlay'),
             revealCards: document.getElementById('revealCards'),
             roomCodeDisplay: document.getElementById('roomCodeDisplay'),
             copyRoomCode: document.getElementById('copyRoomCode'),
-            hostModeToggle: document.getElementById('hostModeToggle')
+            hostModeToggle: document.getElementById('hostModeToggle'),
+            triviaBanner: document.getElementById('triviaBanner')
         };
 
         this.bindEvents();
@@ -269,6 +271,21 @@ class Game {
             'revealed': '<div class="revealed-text">📊 Results are in!</div>'
         };
         this.elements.tableCenter.innerHTML = centerMessages[this.gameState] || '';
+
+        // Ticker banner visibility
+        if (this.elements.triviaBanner) {
+            if (this.gameState === 'waiting' || this.gameState === 'voting') {
+                const existingTicker = document.getElementById('triviaTicker');
+                if (existingTicker && !existingTicker.textContent) {
+                    existingTicker.textContent = this.triviaTicker.getCurrentJoke();
+                }
+                this.elements.triviaBanner.classList.remove('hidden');
+                this.triviaTicker.start();
+            } else {
+                this.elements.triviaBanner.classList.add('hidden');
+                this.triviaTicker.stop();
+            }
+        }
 
         // Card deck visibility
         if (this.gameState === 'voting') {
@@ -572,6 +589,24 @@ class Game {
                         <span class="stat-label">Votes</span>
                     </div>
                 `;
+
+                // Check if all players reached a consensus
+                if (this.checkConsensus(revealOrder)) {
+                    // Add consensus badge to the summary
+                    const consensusBadge = document.createElement('div');
+                    consensusBadge.className = 'summary-stat';
+                    consensusBadge.style.borderColor = 'var(--success)';
+                    consensusBadge.style.boxShadow = '0 0 20px rgba(16, 185, 129, 0.3)';
+                    consensusBadge.innerHTML = `
+                        <span class="stat-value">🎉</span>
+                        <span class="stat-label" style="color: var(--success); font-weight: 700;">Consensus!</span>
+                    `;
+                    summaryEl.appendChild(consensusBadge);
+                    
+                    // Trigger confetti
+                    triggerConfetti();
+                }
+
                 container.appendChild(summaryEl);
 
                 // Add close button (only visible to host)
@@ -615,6 +650,14 @@ class Game {
 
     onPlayerReconnected(msg) {
         this.updateState(msg.roomState);
+    }
+
+    checkConsensus(revealOrder) {
+        const activeVotes = revealOrder.filter(p => p.card !== null && p.card !== '?' && p.card !== '☕');
+        if (activeVotes.length <= 1) return false;
+
+        const firstVote = activeVotes[0].card;
+        return activeVotes.every(p => p.card === firstVote);
     }
 }
 

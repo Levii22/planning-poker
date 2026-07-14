@@ -172,6 +172,45 @@
     font-weight: 600;
 }
 
+/* Trivia Banner */
+.trivia-banner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    background: linear-gradient(90deg, rgba(99, 102, 241, 0.03) 0%, rgba(99, 102, 241, 0.08) 50%, rgba(99, 102, 241, 0.03) 100%);
+    border-bottom: 1px solid var(--glass-border);
+    padding: var(--space-sm) var(--space-xl);
+    font-size: var(--font-size-md);
+    color: var(--text-primary);
+    backdrop-filter: blur(10px);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    z-index: 8;
+}
+
+.trivia-banner.hidden {
+    display: none !important;
+}
+
+.trivia-icon {
+    font-size: 1.1rem;
+    animation: rotate-wiggle 3s ease-in-out infinite;
+}
+
+.trivia-ticker-text {
+    text-align: center;
+    line-height: 1.4;
+    opacity: 0.85;
+}
+
+@keyframes rotate-wiggle {
+    0%, 100% { transform: rotate(0deg); }
+    15% { transform: rotate(-10deg); }
+    30% { transform: rotate(8deg); }
+    45% { transform: rotate(-4deg); }
+    60% { transform: rotate(4deg); }
+}
+
 /* Players Container */
 .players-container {
     position: absolute;
