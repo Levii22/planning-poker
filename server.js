@@ -148,16 +148,27 @@ function generateRoomCode() {
 // Card values for Planning Poker
 const CARD_VALUES = ['0', '½', '1', '2', '3', '5', '8', '13', '21', '?', '☕'];
 
-const AVATAR_EMOJIS = ['🐱', '🐶', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐸', '🐵', '🦄', '🦖', '🐙', '🐳', '🦥', '🦘', '🦉', '🦔', '🦆', '🦖', '🐝', '🐧', '🦁', '🦭'];
+const AVATAR_EMOJIS = [
+    // Animals
+    '🐱', '🐶', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐸', '🐵', '🦄', '🦖', '🐙', '🐳', '🦥', '🦘', '🦉', '🦔', '🐝', '🐧', '🦭',
+    // Tech & Sci-Fi
+    '🤖', '👽', '🥷', '🧙', '👻', '🚀', '💻', '🎮', '⚡', '👾', '🛸', '🛰️',
+    // Food & Fun
+    '🍕', '🌮', '🥑', '🍔', '🍩', '🍿', '☕', '🧋', '🍣', '🥞', '🍦',
+    // Cool & Expressive
+    '😎', '🤯', '🧐', '🤠', '🥳', '👑', '🤩', '😈', '🦸', '🎯', '💎', '🔥'
+];
 const AVATAR_GRADIENTS = [
-    'linear-gradient(135deg, #4f46e5, #312e81)', // Deep Purple/Indigo
-    'linear-gradient(135deg, #ea580c, #991b1b)', // Sunset/Rust
-    'linear-gradient(135deg, #059669, #0f766e)', // Emerald/Teal
-    'linear-gradient(135deg, #db2777, #9f1239)', // Velvet Rose/Plum
+    'linear-gradient(135deg, #4f46e5, #312e81)', // Indigo / Purple
+    'linear-gradient(135deg, #ea580c, #991b1b)', // Sunset / Rust
+    'linear-gradient(135deg, #059669, #0f766e)', // Emerald / Teal
+    'linear-gradient(135deg, #db2777, #9f1239)', // Velvet Rose / Plum
     'linear-gradient(135deg, #0891b2, #0284c7)', // Ocean Cyan
-    'linear-gradient(135deg, #7c3aed, #5b21b6)', // Royal Purple/Violet
+    'linear-gradient(135deg, #7c3aed, #5b21b6)', // Royal Violet
     'linear-gradient(135deg, #d97706, #9a3412)', // Autumn Amber
-    'linear-gradient(135deg, #be123c, #5b21b6)'  // Crimson Dusk
+    'linear-gradient(135deg, #ec4899, #8b5cf6)', // Cyber Pink
+    'linear-gradient(135deg, #eab308, #ca8a04)', // Golden Glow
+    'linear-gradient(135deg, #84cc16, #15803d)'  // Neon Lime
 ];
 
 function getRandomPlayerAvatar() {
@@ -510,6 +521,29 @@ function handleMessage(ws, message) {
             });
 
             console.log(`Host mode toggled in room ${player.roomCode}: ${room.ignoreHostVote}`);
+            break;
+        }
+
+        case 'update_avatar': {
+            const player = players.get(ws);
+            if (!player) return;
+
+            if (message.avatar && typeof message.avatar === 'string') {
+                player.avatar = message.avatar.slice(0, 4);
+            }
+            if (message.color && typeof message.color === 'string') {
+                player.color = message.color;
+            }
+
+            broadcastToRoom(player.roomCode, {
+                type: 'avatar_updated',
+                playerId: player.id,
+                avatar: player.avatar,
+                color: player.color,
+                roomState: getRoomState(player.roomCode)
+            });
+
+            console.log(`Player ${player.name} updated avatar to ${player.avatar}`);
             break;
         }
 

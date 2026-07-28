@@ -101,8 +101,19 @@
       </div>
 
       <div id="cardDeck" class="card-deck hidden">
-        <div class="deck-label">Choose your estimate</div>
+        <div class="deck-header">
+          <div class="deck-label">Choose your estimate</div>
+          <button id="hideChoiceToggle" class="stealth-toggle-btn" title="Automatically hide your choice from screen after voting to prevent peeking">
+            <span class="stealth-icon">🙈</span>
+            <span class="stealth-text">Auto-Hide Choice</span>
+          </button>
+        </div>
         <div id="deckCards" class="deck-cards"></div>
+        <div id="stealthLockedView" class="stealth-single-card hidden">
+          <div class="stealth-shield-icon">🛡️</div>
+          <div class="stealth-shield-text">Vote Locked & Hidden</div>
+          <div class="stealth-subtext">Click "Choice Hidden" or in this box to unlock & reselect</div>
+        </div>
       </div>
 
       <div id="hostControls" class="host-controls hidden">
@@ -129,6 +140,45 @@
       <div id="revealOverlay" class="reveal-overlay hidden">
         <div class="reveal-spotlight"></div>
         <div id="revealCards" class="reveal-cards"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Avatar Customizer Modal -->
+  <div id="avatarModal" class="modal-overlay hidden">
+    <div class="modal-container avatar-modal">
+      <div class="modal-header">
+        <h3>Customize Avatar</h3>
+        <button id="closeAvatarModal" class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <!-- Live Preview -->
+        <div class="avatar-preview-section">
+          <div id="avatarPreview" class="avatar-preview-lg">
+            <span id="avatarPreviewEmoji" class="avatar-emoji">🐱</span>
+          </div>
+          <button id="modalRerollBtn" class="btn btn-secondary btn-sm">
+            <span>🎲</span> Shuffle Random
+          </button>
+        </div>
+
+        <!-- Category Tabs -->
+        <div class="emoji-tabs">
+          <button class="tab-btn active" data-tab="animals">🐱 Animals</button>
+          <button class="tab-btn" data-tab="tech">🚀 Sci-Fi & Tech</button>
+          <button class="tab-btn" data-tab="food">🍕 Food & Treats</button>
+          <button class="tab-btn" data-tab="fun">😎 Expressive</button>
+        </div>
+
+        <!-- Emoji Grid -->
+        <div id="emojiGrid" class="emoji-grid"></div>
+
+        <!-- Gradient Palette -->
+        <div class="palette-section-title">Background Theme</div>
+        <div id="gradientPalette" class="gradient-palette"></div>
+      </div>
+      <div class="modal-footer">
+        <button id="saveAvatarBtn" class="btn btn-primary btn-block">Save Avatar</button>
       </div>
     </div>
   </div>

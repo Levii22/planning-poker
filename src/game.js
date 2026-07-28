@@ -2,6 +2,27 @@
 import { wsClient } from './websocket.js';
 import { TriviaTicker } from './trivia.js';
 import { triggerConfetti } from './confetti.js';
+import { StealthManager } from './stealth.js';
+
+const EMOJI_CATEGORIES = {
+    animals: ['🐱', '🐶', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐸', '🐵', '🦄', '🦖', '🐙', '🐳', '🦥', '🦘', '🦉', '🦔', '🐝', '🐧', '🦭'],
+    tech: ['🤖', '👽', '🥷', '🧙', '👻', '🚀', '💻', '🎮', '⚡', '👾', '🛸', '🛰️'],
+    food: ['🍕', '🌮', '🥑', '🍔', '🍩', '🍿', '☕', '🧋', '🍣', '🥞', '🍦'],
+    fun: ['😎', '🤯', '🧐', '🤠', '🥳', '👑', '🤩', '😈', '🦸', '🎯', '💎', '🔥']
+};
+
+const GRADIENT_PALETTE = [
+    'linear-gradient(135deg, #4f46e5, #312e81)',
+    'linear-gradient(135deg, #ea580c, #991b1b)',
+    'linear-gradient(135deg, #059669, #0f766e)',
+    'linear-gradient(135deg, #db2777, #9f1239)',
+    'linear-gradient(135deg, #0891b2, #0284c7)',
+    'linear-gradient(135deg, #7c3aed, #5b21b6)',
+    'linear-gradient(135deg, #d97706, #9a3412)',
+    'linear-gradient(135deg, #ec4899, #8b5cf6)',
+    'linear-gradient(135deg, #eab308, #ca8a04)',
+    'linear-gradient(135deg, #84cc16, #15803d)'
+];
 
 class Game {
     constructor() {
@@ -13,8 +34,18 @@ class Game {
         this.gameState = 'waiting';
         this.cardValues = [];
         this.triviaTicker = new TriviaTicker('triviaTicker');
+        this.stealthManager = new StealthManager();
+        this.stealthManager.onToggle(() => {
+            this.stealthManager.toggle(this.selectedCard !== null);
+        });
+
+        // Modal avatar state
+        this.selectedAvatarEmoji = '🐱';
+        this.selectedAvatarGradient = GRADIENT_PALETTE[0];
+        this.activeEmojiTab = 'animals';
 
         this.elements = {
+            gameView: document.getElementById('game'),
             playersContainer: document.getElementById('playersContainer'),
             cardDeck: document.getElementById('cardDeck'),
             deckCards: document.getElementById('deckCards'),
@@ -29,7 +60,16 @@ class Game {
             roomCodeDisplay: document.getElementById('roomCodeDisplay'),
             copyRoomCode: document.getElementById('copyRoomCode'),
             hostModeToggle: document.getElementById('hostModeToggle'),
-            triviaBanner: document.getElementById('triviaBanner')
+            triviaBanner: document.getElementById('triviaBanner'),
+            // Avatar Modal
+            avatarModal: document.getElementById('avatarModal'),
+            closeAvatarModal: document.getElementById('closeAvatarModal'),
+            avatarPreview: document.getElementById('avatarPreview'),
+            avatarPreviewEmoji: document.getElementById('avatarPreviewEmoji'),
+            modalRerollBtn: document.getElementById('modalRerollBtn'),
+            emojiGrid: document.getElementById('emojiGrid'),
+            gradientPalette: document.getElementById('gradientPalette'),
+            saveAvatarBtn: document.getElementById('saveAvatarBtn')
         };
 
         this.bindEvents();
@@ -42,6 +82,23 @@ class Game {
         this.elements.copyRoomCode.addEventListener('click', () => this.copyRoomCode());
         this.elements.hostModeToggle.addEventListener('click', () => this.toggleHostMode());
 
+        // Avatar Modal Events
+        if (this.elements.closeAvatarModal) {
+            this.elements.closeAvatarModal.addEventListener('click', () => this.closeAvatarModal());
+            this.elements.saveAvatarBtn.addEventListener('click', () => this.saveAvatar());
+            this.elements.modalRerollBtn.addEventListener('click', () => this.rerollAvatarModal());
+
+            // Tab Switching
+            this.elements.avatarModal.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    this.elements.avatarModal.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    this.activeEmojiTab = btn.dataset.tab;
+                    this.renderEmojiGrid();
+                });
+            });
+        }
+
         // WebSocket handlers
         wsClient.on('round_started', (msg) => this.onRoundStarted(msg));
         wsClient.on('player_selected', (msg) => this.onPlayerSelected(msg));
@@ -53,6 +110,7 @@ class Game {
         wsClient.on('reveal_closed', () => this.onRevealClosed());
         wsClient.on('host_transferred', (msg) => this.onHostTransferred(msg));
         wsClient.on('host_mode_toggled', (msg) => this.onHostModeToggled(msg));
+        wsClient.on('avatar_updated', (msg) => this.onAvatarUpdated(msg));
         wsClient.on('player_disconnected', (msg) => this.onPlayerDisconnected(msg));
         wsClient.on('player_reconnected', (msg) => this.onPlayerReconnected(msg));
     }
@@ -109,6 +167,12 @@ class Game {
           <span class="avatar-emoji">${player.avatar || '👤'}</span>
           ${player.isHost ? '<span class="host-badge">👑</span>' : ''}
           ${canTransferHost ? '<button class="make-host-btn" title="Make host">👑</button>' : ''}
+          ${isMe ? `
+            <div class="avatar-actions">
+              <button class="avatar-action-btn quick-reroll-btn" title="Quick Reroll (🎲)">🎲</button>
+              <button class="avatar-action-btn quick-edit-btn" title="Customize Avatar (✏️)">✏️</button>
+            </div>
+          ` : ''}
         </div>
         <div class="player-name">${player.name}${isMe ? ' (You)' : ''}</div>
         <div class="player-card-slot">
@@ -136,6 +200,28 @@ class Game {
         </div>
         ${player.hasSelected ? '<div class="selected-indicator">✓</div>' : ''}
       `;
+
+            // Add click handlers for current player's avatar actions
+            if (isMe) {
+                const avatarEl = playerEl.querySelector('.player-avatar');
+                const quickRerollBtn = playerEl.querySelector('.quick-reroll-btn');
+                const quickEditBtn = playerEl.querySelector('.quick-edit-btn');
+
+                quickRerollBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.quickRerollAvatar();
+                });
+
+                quickEditBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.openAvatarModal(player.avatar, player.color);
+                });
+
+                avatarEl.addEventListener('click', (e) => {
+                    if (e.target.closest('.avatar-action-btn')) return;
+                    this.openAvatarModal(player.avatar, player.color);
+                });
+            }
 
             // Add click handler for transfer host button
             if (canTransferHost) {
@@ -197,10 +283,13 @@ class Game {
             card.addEventListener('click', () => this.selectCard(value, card));
             container.appendChild(card);
         });
+
+        this.stealthManager.updateDeckStealthState(this.selectedCard !== null);
     }
 
     selectCard(value, cardEl) {
         if (this.gameState !== 'voting') return;
+        if (!this.stealthManager.canSelectCard(this.selectedCard !== null)) return;
 
         // Remove previous selection
         this.elements.deckCards.querySelectorAll('.deck-card').forEach(c => {
@@ -216,6 +305,9 @@ class Game {
 
         // Send to server
         wsClient.send('select_card', { card: value });
+
+        // Update stealth UI state
+        this.stealthManager.updateDeckStealthState(true);
     }
 
     animateCardSelection(cardEl) {
@@ -232,6 +324,8 @@ class Game {
       z-index: 1000;
       pointer-events: none;
     `;
+
+        this.stealthManager.maskFlyingCard(clone);
 
         document.body.appendChild(clone);
 
@@ -273,22 +367,18 @@ class Game {
 
         // Ticker banner visibility
         if (this.elements.triviaBanner) {
-            if (this.gameState === 'waiting' || this.gameState === 'voting') {
-                const existingTicker = document.getElementById('triviaTicker');
-                if (existingTicker && !existingTicker.textContent) {
-                    existingTicker.textContent = this.triviaTicker.getCurrentJoke();
-                }
-                this.elements.triviaBanner.classList.remove('hidden');
-                this.triviaTicker.start();
-            } else {
-                this.elements.triviaBanner.classList.add('hidden');
-                this.triviaTicker.stop();
+            const existingTicker = document.getElementById('triviaTicker');
+            if (existingTicker && !existingTicker.textContent) {
+                existingTicker.textContent = this.triviaTicker.getCurrentJoke();
             }
+            this.elements.triviaBanner.classList.remove('hidden');
+            this.triviaTicker.start();
         }
 
         // Card deck visibility
         if (this.gameState === 'voting') {
             this.elements.cardDeck.classList.remove('hidden');
+            this.stealthManager.updateDeckStealthState(this.selectedCard !== null);
         } else {
             this.elements.cardDeck.classList.add('hidden');
         }
@@ -334,6 +424,7 @@ class Game {
         this.elements.deckCards.querySelectorAll('.deck-card').forEach(c => {
             c.classList.remove('selected');
         });
+        this.stealthManager.updateDeckStealthState(false);
         wsClient.send('reset_round');
     }
 
@@ -378,6 +469,7 @@ class Game {
         this.elements.deckCards.querySelectorAll('.deck-card').forEach(c => {
             c.classList.remove('selected');
         });
+        this.stealthManager.updateDeckStealthState(false);
 
         this.updateState(msg.roomState);
 
@@ -609,6 +701,111 @@ class Game {
 
         const firstVote = activeVotes[0].card;
         return activeVotes.every(p => p.card === firstVote);
+    }
+
+    // =========================================================================
+    // AVATAR CUSTOMIZER & REROLL
+    // =========================================================================
+    quickRerollAvatar() {
+        const allEmojis = Object.values(EMOJI_CATEGORIES).flat();
+        const randomEmoji = allEmojis[Math.floor(Math.random() * allEmojis.length)];
+        const randomGradient = GRADIENT_PALETTE[Math.floor(Math.random() * GRADIENT_PALETTE.length)];
+
+        wsClient.send('update_avatar', {
+            avatar: randomEmoji,
+            color: randomGradient
+        });
+    }
+
+    openAvatarModal(currentAvatar, currentColor) {
+        this.selectedAvatarEmoji = currentAvatar || '🐱';
+        this.selectedAvatarGradient = currentColor || GRADIENT_PALETTE[0];
+
+        this.updateAvatarPreview();
+        this.renderEmojiGrid();
+        this.renderGradientPalette();
+
+        if (this.elements.avatarModal) {
+            this.elements.avatarModal.classList.remove('hidden');
+        }
+    }
+
+    closeAvatarModal() {
+        if (this.elements.avatarModal) {
+            this.elements.avatarModal.classList.add('hidden');
+        }
+    }
+
+    updateAvatarPreview() {
+        if (this.elements.avatarPreviewEmoji) {
+            this.elements.avatarPreviewEmoji.textContent = this.selectedAvatarEmoji;
+        }
+        if (this.elements.avatarPreview) {
+            this.elements.avatarPreview.style.background = this.selectedAvatarGradient;
+        }
+    }
+
+    renderEmojiGrid() {
+        const container = this.elements.emojiGrid;
+        if (!container) return;
+
+        container.innerHTML = '';
+        const list = EMOJI_CATEGORIES[this.activeEmojiTab] || EMOJI_CATEGORIES.animals;
+
+        list.forEach(emoji => {
+            const btn = document.createElement('button');
+            btn.className = `emoji-option ${this.selectedAvatarEmoji === emoji ? 'selected' : ''}`;
+            btn.textContent = emoji;
+            btn.addEventListener('click', () => {
+                this.selectedAvatarEmoji = emoji;
+                container.querySelectorAll('.emoji-option').forEach(b => b.classList.remove('selected'));
+                btn.classList.add('selected');
+                this.updateAvatarPreview();
+            });
+            container.appendChild(btn);
+        });
+    }
+
+    renderGradientPalette() {
+        const container = this.elements.gradientPalette;
+        if (!container) return;
+
+        container.innerHTML = '';
+
+        GRADIENT_PALETTE.forEach(gradient => {
+            const swatch = document.createElement('div');
+            swatch.className = `gradient-swatch ${this.selectedAvatarGradient === gradient ? 'selected' : ''}`;
+            swatch.style.background = gradient;
+            swatch.addEventListener('click', () => {
+                this.selectedAvatarGradient = gradient;
+                container.querySelectorAll('.gradient-swatch').forEach(s => s.classList.remove('selected'));
+                swatch.classList.add('selected');
+                this.updateAvatarPreview();
+            });
+            container.appendChild(swatch);
+        });
+    }
+
+    rerollAvatarModal() {
+        const allEmojis = Object.values(EMOJI_CATEGORIES).flat();
+        this.selectedAvatarEmoji = allEmojis[Math.floor(Math.random() * allEmojis.length)];
+        this.selectedAvatarGradient = GRADIENT_PALETTE[Math.floor(Math.random() * GRADIENT_PALETTE.length)];
+
+        this.updateAvatarPreview();
+        this.renderEmojiGrid();
+        this.renderGradientPalette();
+    }
+
+    saveAvatar() {
+        wsClient.send('update_avatar', {
+            avatar: this.selectedAvatarEmoji,
+            color: this.selectedAvatarGradient
+        });
+        this.closeAvatarModal();
+    }
+
+    onAvatarUpdated(msg) {
+        this.updateState(msg.roomState);
     }
 }
 
