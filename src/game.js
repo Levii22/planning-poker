@@ -1,28 +1,11 @@
-// Game rendering and animation control
+// Game Coordinator & View Controller
 import { wsClient } from './websocket.js';
 import { TriviaTicker } from './trivia.js';
-import { triggerConfetti } from './confetti.js';
-import { StealthManager } from './stealth.js';
-
-const EMOJI_CATEGORIES = {
-    animals: ['🐱', '🐶', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐸', '🐵', '🦄', '🦖', '🐙', '🐳', '🦥', '🦘', '🦉', '🦔', '🐝', '🐧', '🦭'],
-    tech: ['🤖', '👽', '🥷', '🧙', '👻', '🚀', '💻', '🎮', '⚡', '👾', '🛸', '🛰️'],
-    food: ['🍕', '🌮', '🥑', '🍔', '🍩', '🍿', '☕', '🧋', '🍣', '🥞', '🍦'],
-    fun: ['😎', '🤯', '🧐', '🤠', '🥳', '👑', '🤩', '😈', '🦸', '🎯', '💎', '🔥']
-};
-
-const GRADIENT_PALETTE = [
-    'linear-gradient(135deg, #4f46e5, #312e81)',
-    'linear-gradient(135deg, #ea580c, #991b1b)',
-    'linear-gradient(135deg, #059669, #0f766e)',
-    'linear-gradient(135deg, #db2777, #9f1239)',
-    'linear-gradient(135deg, #0891b2, #0284c7)',
-    'linear-gradient(135deg, #7c3aed, #5b21b6)',
-    'linear-gradient(135deg, #d97706, #9a3412)',
-    'linear-gradient(135deg, #ec4899, #8b5cf6)',
-    'linear-gradient(135deg, #eab308, #ca8a04)',
-    'linear-gradient(135deg, #84cc16, #15803d)'
-];
+import { soundManager } from './audio.js';
+import { AvatarManager } from './avatar.js';
+import { TableManager } from './table.js';
+import { DeckManager } from './deck.js';
+import { RevealManager } from './reveal.js';
 
 class Game {
     constructor() {
@@ -30,76 +13,55 @@ class Game {
         this.roomCode = null;
         this.isHost = false;
         this.players = [];
-        this.selectedCard = null;
         this.gameState = 'waiting';
         this.cardValues = [];
-        this.triviaTicker = new TriviaTicker('triviaTicker');
-        this.stealthManager = new StealthManager();
-        this.stealthManager.onToggle(() => {
-            this.stealthManager.toggle(this.selectedCard !== null);
-        });
 
-        // Modal avatar state
-        this.selectedAvatarEmoji = '🐱';
-        this.selectedAvatarGradient = GRADIENT_PALETTE[0];
-        this.activeEmojiTab = 'animals';
+        // Sub-managers
+        this.triviaTicker = new TriviaTicker('triviaTicker');
+        this.avatarManager = new AvatarManager();
+        this.tableManager = new TableManager(document.getElementById('playersContainer'));
+        this.deckManager = new DeckManager(
+            document.getElementById('cardDeck'),
+            document.getElementById('deckCards')
+        );
+        this.revealManager = new RevealManager(
+            document.getElementById('revealOverlay'),
+            document.getElementById('revealCards')
+        );
 
         this.elements = {
             gameView: document.getElementById('game'),
-            playersContainer: document.getElementById('playersContainer'),
-            cardDeck: document.getElementById('cardDeck'),
-            deckCards: document.getElementById('deckCards'),
             hostControls: document.getElementById('hostControls'),
             startRoundBtn: document.getElementById('startRoundBtn'),
             revealCardsBtn: document.getElementById('revealCardsBtn'),
             newRoundBtn: document.getElementById('newRoundBtn'),
             tableCenter: document.getElementById('tableCenter'),
             gameStatus: document.getElementById('gameStatus'),
-            revealOverlay: document.getElementById('revealOverlay'),
-            revealCards: document.getElementById('revealCards'),
             roomCodeDisplay: document.getElementById('roomCodeDisplay'),
             copyRoomCode: document.getElementById('copyRoomCode'),
             hostModeToggle: document.getElementById('hostModeToggle'),
             triviaBanner: document.getElementById('triviaBanner'),
-            // Avatar Modal
-            avatarModal: document.getElementById('avatarModal'),
-            closeAvatarModal: document.getElementById('closeAvatarModal'),
-            avatarPreview: document.getElementById('avatarPreview'),
-            avatarPreviewEmoji: document.getElementById('avatarPreviewEmoji'),
-            modalRerollBtn: document.getElementById('modalRerollBtn'),
-            emojiGrid: document.getElementById('emojiGrid'),
-            gradientPalette: document.getElementById('gradientPalette'),
-            saveAvatarBtn: document.getElementById('saveAvatarBtn')
+            soundToggleBtn: document.getElementById('soundToggleBtn')
         };
+
+        this.updateSoundToggleUI();
+        soundManager.onMuteChange(() => this.updateSoundToggleUI());
 
         this.bindEvents();
     }
 
     bindEvents() {
-        this.elements.startRoundBtn.addEventListener('click', () => this.startRound());
-        this.elements.revealCardsBtn.addEventListener('click', () => this.revealCards());
+        this.elements.startRoundBtn.addEventListener('click', () => wsClient.send('start_round'));
+        this.elements.revealCardsBtn.addEventListener('click', () => wsClient.send('reveal_cards'));
         this.elements.newRoundBtn.addEventListener('click', () => this.newRound());
         this.elements.copyRoomCode.addEventListener('click', () => this.copyRoomCode());
         this.elements.hostModeToggle.addEventListener('click', () => this.toggleHostMode());
 
-        // Avatar Modal Events
-        if (this.elements.closeAvatarModal) {
-            this.elements.closeAvatarModal.addEventListener('click', () => this.closeAvatarModal());
-            this.elements.saveAvatarBtn.addEventListener('click', () => this.saveAvatar());
-            this.elements.modalRerollBtn.addEventListener('click', () => this.rerollAvatarModal());
-
-            // Tab Switching
-            this.elements.avatarModal.querySelectorAll('.tab-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    this.elements.avatarModal.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-                    btn.classList.add('active');
-                    this.activeEmojiTab = btn.dataset.tab;
-                    this.renderEmojiGrid();
-                });
-            });
+        if (this.elements.soundToggleBtn) {
+            this.elements.soundToggleBtn.addEventListener('click', () => this.toggleSound());
         }
 
-        // WebSocket handlers
+        // WebSocket Handlers
         wsClient.on('round_started', (msg) => this.onRoundStarted(msg));
         wsClient.on('player_selected', (msg) => this.onPlayerSelected(msg));
         wsClient.on('cards_revealed', (msg) => this.onCardsRevealed(msg));
@@ -107,12 +69,12 @@ class Game {
         wsClient.on('player_joined', (msg) => this.onPlayerJoined(msg));
         wsClient.on('player_left', (msg) => this.onPlayerLeft(msg));
         wsClient.on('became_host', () => this.onBecameHost());
-        wsClient.on('reveal_closed', () => this.onRevealClosed());
+        wsClient.on('reveal_closed', () => this.revealManager.closeOverlay());
         wsClient.on('host_transferred', (msg) => this.onHostTransferred(msg));
         wsClient.on('host_mode_toggled', (msg) => this.onHostModeToggled(msg));
-        wsClient.on('avatar_updated', (msg) => this.onAvatarUpdated(msg));
-        wsClient.on('player_disconnected', (msg) => this.onPlayerDisconnected(msg));
-        wsClient.on('player_reconnected', (msg) => this.onPlayerReconnected(msg));
+        wsClient.on('avatar_updated', (msg) => this.updateState(msg.roomState));
+        wsClient.on('player_disconnected', (msg) => this.updateState(msg.roomState));
+        wsClient.on('player_reconnected', (msg) => this.updateState(msg.roomState));
     }
 
     initialize(roomCode, playerId, isHost, roomState) {
@@ -127,13 +89,12 @@ class Game {
             this.elements.hostControls.classList.remove('hidden');
         }
 
-        // Initialize host mode state if present
         if (roomState.ignoreHostVote !== undefined) {
             this.updateHostModeUI(roomState.ignoreHostVote);
         }
 
         this.updateState(roomState);
-        this.renderCardDeck();
+        this.deckManager.renderDeck(this.cardValues);
     }
 
     updateState(roomState) {
@@ -145,210 +106,19 @@ class Game {
     }
 
     renderPlayers() {
-        const container = this.elements.playersContainer;
-        container.innerHTML = '';
-
-        const positions = this.calculatePositions(this.players.length);
-
-        this.players.forEach((player, index) => {
-            const pos = positions[index];
-            const isMe = player.id === this.playerId;
-            const canTransferHost = this.isHost && !isMe && !player.isHost;
-
-            const playerEl = document.createElement('div');
-            playerEl.className = `player ${isMe ? 'is-me' : ''} ${player.hasSelected ? 'has-selected' : ''} ${player.isHost ? 'is-host' : ''} ${canTransferHost ? 'can-make-host' : ''} ${!player.active ? 'is-offline' : ''}`;
-            playerEl.dataset.playerId = player.id;
-            playerEl.style.setProperty('--pos-x', `${pos.x}%`);
-            playerEl.style.setProperty('--pos-y', `${pos.y}%`);
-            playerEl.style.setProperty('--angle', `${pos.angle}deg`);
-
-            playerEl.innerHTML = `
-        <div class="player-avatar" style="background: ${player.color || 'var(--color-primary)'}">
-          <span class="avatar-emoji">${player.avatar || '👤'}</span>
-          ${player.isHost ? '<span class="host-badge">👑</span>' : ''}
-          ${canTransferHost ? '<button class="make-host-btn" title="Make host">👑</button>' : ''}
-          ${isMe ? `
-            <div class="avatar-actions">
-              <button class="avatar-action-btn quick-reroll-btn" title="Quick Reroll (🎲)">🎲</button>
-              <button class="avatar-action-btn quick-edit-btn" title="Customize Avatar (✏️)">✏️</button>
-            </div>
-          ` : ''}
-        </div>
-        <div class="player-name">${player.name}${isMe ? ' (You)' : ''}</div>
-        <div class="player-card-slot">
-          <div class="card-placeholder ${player.hasSelected ? 'card-placed' : ''}">
-            ${this.gameState === 'revealed' && player.card !== null ? `
-              <div class="card revealed" data-value="${player.card}">
-                <div class="card-inner">
-                  <div class="card-front">
-                    <span class="card-value">${player.card}</span>
-                  </div>
-                  <div class="card-back"></div>
-                </div>
-              </div>
-            ` : player.hasSelected ? `
-              <div class="card face-down">
-                <div class="card-inner">
-                  <div class="card-front"></div>
-                  <div class="card-back">
-                    <span class="back-pattern">🃏</span>
-                  </div>
-                </div>
-              </div>
-            ` : ''}
-          </div>
-        </div>
-        ${player.hasSelected ? '<div class="selected-indicator">✓</div>' : ''}
-      `;
-
-            // Add click handlers for current player's avatar actions
-            if (isMe) {
-                const avatarEl = playerEl.querySelector('.player-avatar');
-                const quickRerollBtn = playerEl.querySelector('.quick-reroll-btn');
-                const quickEditBtn = playerEl.querySelector('.quick-edit-btn');
-
-                quickRerollBtn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    this.quickRerollAvatar();
-                });
-
-                quickEditBtn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    this.openAvatarModal(player.avatar, player.color);
-                });
-
-                avatarEl.addEventListener('click', (e) => {
-                    if (e.target.closest('.avatar-action-btn')) return;
-                    this.openAvatarModal(player.avatar, player.color);
-                });
-            }
-
-            // Add click handler for transfer host button
-            if (canTransferHost) {
-                const makeHostBtn = playerEl.querySelector('.make-host-btn');
-                makeHostBtn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    this.transferHost(player.id);
-                });
-            }
-
-            container.appendChild(playerEl);
+        this.tableManager.renderPlayers({
+            players: this.players,
+            playerId: this.playerId,
+            isHost: this.isHost,
+            gameState: this.gameState,
+            onOpenAvatarModal: (avatar, color) => this.avatarManager.openAvatarModal(avatar, color),
+            onQuickReroll: () => this.avatarManager.quickRerollAvatar(),
+            onTransferHost: (targetId) => this.transferHost(targetId)
         });
-    }
-
-    calculatePositions(count) {
-        const positions = [];
-        const tableWidth = 80; // percentage
-        const tableHeight = 60;
-        const centerX = 50;
-        const centerY = 45;
-
-        for (let i = 0; i < count; i++) {
-            // Distribute around an ellipse
-            const angle = (i / count) * 2 * Math.PI - Math.PI / 2;
-            const x = centerX + (tableWidth / 2) * Math.cos(angle);
-            const y = centerY + (tableHeight / 2) * Math.sin(angle);
-
-            positions.push({
-                x,
-                y,
-                angle: (angle * 180 / Math.PI) + 90
-            });
-        }
-
-        return positions;
-    }
-
-    renderCardDeck() {
-        const container = this.elements.deckCards;
-        container.innerHTML = '';
-
-        this.cardValues.forEach((value, index) => {
-            const card = document.createElement('div');
-            card.className = 'deck-card';
-            card.dataset.value = value;
-            card.style.setProperty('--card-index', index);
-
-            card.innerHTML = `
-        <div class="card-inner">
-          <div class="card-front">
-            <span class="card-value">${value}</span>
-          </div>
-          <div class="card-back">
-            <span class="back-pattern">🃏</span>
-          </div>
-        </div>
-      `;
-
-            card.addEventListener('click', () => this.selectCard(value, card));
-            container.appendChild(card);
-        });
-
-        this.stealthManager.updateDeckStealthState(this.selectedCard !== null);
-    }
-
-    selectCard(value, cardEl) {
-        if (this.gameState !== 'voting') return;
-        if (!this.stealthManager.canSelectCard(this.selectedCard !== null)) return;
-
-        // Remove previous selection
-        this.elements.deckCards.querySelectorAll('.deck-card').forEach(c => {
-            c.classList.remove('selected');
-        });
-
-        // Select new card
-        cardEl.classList.add('selected');
-        this.selectedCard = value;
-
-        // Animate card flying to table
-        this.animateCardSelection(cardEl);
-
-        // Send to server
-        wsClient.send('select_card', { card: value });
-
-        // Update stealth UI state
-        this.stealthManager.updateDeckStealthState(true);
-    }
-
-    animateCardSelection(cardEl) {
-        // Create flying card clone
-        const rect = cardEl.getBoundingClientRect();
-        const clone = cardEl.cloneNode(true);
-        clone.className = 'flying-card';
-        clone.style.cssText = `
-      position: fixed;
-      left: ${rect.left}px;
-      top: ${rect.top}px;
-      width: ${rect.width}px;
-      height: ${rect.height}px;
-      z-index: 1000;
-      pointer-events: none;
-    `;
-
-        this.stealthManager.maskFlyingCard(clone);
-
-        document.body.appendChild(clone);
-
-        // Find my player's card slot
-        const myPlayer = this.elements.playersContainer.querySelector('.player.is-me .card-placeholder');
-        if (myPlayer) {
-            const targetRect = myPlayer.getBoundingClientRect();
-
-            requestAnimationFrame(() => {
-                clone.style.transition = 'all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)';
-                clone.style.left = `${targetRect.left}px`;
-                clone.style.top = `${targetRect.top}px`;
-                clone.style.transform = 'scale(0.6) rotateY(180deg)';
-            });
-
-            setTimeout(() => clone.remove(), 600);
-        } else {
-            clone.remove();
-        }
     }
 
     updateUI() {
-        // Update status badge
+        // Status Badge
         const statusText = {
             'waiting': 'Waiting to Start',
             'voting': 'Vote Now!',
@@ -357,7 +127,7 @@ class Game {
         this.elements.gameStatus.textContent = statusText[this.gameState] || 'Unknown';
         this.elements.gameStatus.className = `status-badge status-${this.gameState}`;
 
-        // Update table center message
+        // Table Center Message
         const centerMessages = {
             'waiting': '<div class="waiting-text">Waiting to start...</div>',
             'voting': '<div class="voting-text">🗳️ Select your card!</div>',
@@ -365,7 +135,7 @@ class Game {
         };
         this.elements.tableCenter.innerHTML = centerMessages[this.gameState] || '';
 
-        // Ticker banner visibility
+        // Ticker Banner
         if (this.elements.triviaBanner) {
             const existingTicker = document.getElementById('triviaTicker');
             if (existingTicker && !existingTicker.textContent) {
@@ -375,15 +145,14 @@ class Game {
             this.triviaTicker.start();
         }
 
-        // Card deck visibility
+        // Card Deck
         if (this.gameState === 'voting') {
-            this.elements.cardDeck.classList.remove('hidden');
-            this.stealthManager.updateDeckStealthState(this.selectedCard !== null);
+            this.deckManager.show();
         } else {
-            this.elements.cardDeck.classList.add('hidden');
+            this.deckManager.hide();
         }
 
-        // Host controls
+        // Host Controls
         if (this.isHost) {
             this.elements.startRoundBtn.classList.toggle('hidden', this.gameState !== 'waiting');
             this.elements.revealCardsBtn.classList.toggle('hidden', this.gameState !== 'voting');
@@ -393,41 +162,14 @@ class Game {
             this.elements.hostModeToggle.classList.add('hidden');
         }
 
-        if (this.gameState === 'revealed' && this.elements.revealOverlay.classList.contains('active')) {
-            const container = this.elements.revealCards;
-            const existingBtn = container.querySelector('.reveal-close-btn');
-
-            if (this.isHost && !existingBtn) {
-                const closeBtn = document.createElement('button');
-                closeBtn.className = 'reveal-close-btn';
-                closeBtn.innerHTML = '✓ Continue to Discussion';
-                closeBtn.addEventListener('click', () => this.hostCloseReveal());
-
-                container.appendChild(closeBtn);
-            } else if (!this.isHost && existingBtn) {
-                existingBtn.remove();
-            }
-        }
-    }
-
-    // Host actions
-    startRound() {
-        wsClient.send('start_round');
-    }
-
-    revealCards() {
-        wsClient.send('reveal_cards');
+        // Sync reveal host close button if open
+        this.revealManager.syncHostCloseButton(this.isHost);
     }
 
     newRound() {
-        this.selectedCard = null;
-        this.elements.deckCards.querySelectorAll('.deck-card').forEach(c => {
-            c.classList.remove('selected');
-        });
-        this.stealthManager.updateDeckStealthState(false);
+        this.deckManager.reset();
         wsClient.send('reset_round');
     }
-
 
     toggleHostMode() {
         if (!this.isHost) return;
@@ -449,6 +191,24 @@ class Game {
         }
     }
 
+    toggleSound() {
+        const isMuted = soundManager.toggleMute();
+        if (!isMuted) {
+            soundManager.playClick();
+        }
+        this.updateSoundToggleUI();
+    }
+
+    updateSoundToggleUI() {
+        if (!this.elements.soundToggleBtn) return;
+        const isMuted = soundManager.isMuted();
+        this.elements.soundToggleBtn.classList.toggle('muted', isMuted);
+        const icon = this.elements.soundToggleBtn.querySelector('.sound-icon');
+        if (icon) {
+            icon.textContent = isMuted ? '🔇' : '🔊';
+        }
+        this.elements.soundToggleBtn.title = isMuted ? 'Unmute Sound FX (Muted)' : 'Mute Sound FX (Enabled)';
+    }
 
     copyRoomCode() {
         const url = new URL(window.location.href);
@@ -461,350 +221,60 @@ class Game {
         });
     }
 
-    // WebSocket event handlers
+    transferHost(playerId) {
+        if (!this.isHost) return;
+        wsClient.send('transfer_host', { playerId });
+    }
+
+    // WebSocket Event Handlers
     onRoundStarted(msg) {
-        this.selectedCard = null;
-
-        // Clear any previously selected cards in the deck
-        this.elements.deckCards.querySelectorAll('.deck-card').forEach(c => {
-            c.classList.remove('selected');
-        });
-        this.stealthManager.updateDeckStealthState(false);
-
+        soundManager.playRoundStart();
+        this.deckManager.reset();
         this.updateState(msg.roomState);
-
-        // Animate deck appearing
-        this.elements.cardDeck.classList.add('deck-enter');
-        setTimeout(() => this.elements.cardDeck.classList.remove('deck-enter'), 500);
+        this.deckManager.animateEnter();
     }
 
     onPlayerSelected(msg) {
         this.updateState(msg.roomState);
-
-        // Add selection animation to the player
-        const playerEl = this.elements.playersContainer.querySelector(`[data-player-id="${msg.playerId}"]`);
-        if (playerEl) {
-            playerEl.classList.add('just-selected');
-            setTimeout(() => playerEl.classList.remove('just-selected'), 1000);
-        }
+        this.tableManager.animatePlayerSelect(msg.playerId);
     }
 
     onCardsRevealed(msg) {
         this.updateState(msg.roomState);
-        this.playRevealAnimation(msg.revealOrder);
+        this.revealManager.playRevealAnimation(msg.revealOrder, this.isHost);
     }
 
     onRoundReset(msg) {
-        this.selectedCard = null;
+        this.deckManager.reset();
         this.updateState(msg.roomState);
     }
 
     onPlayerJoined(msg) {
         this.updateState(msg.roomState);
-
-        // Find the new player and animate
-        const playerEl = this.elements.playersContainer.querySelector(`[data-player-id="${msg.player.id}"]`);
-        if (playerEl) {
-            playerEl.classList.add('player-enter');
-            setTimeout(() => playerEl.classList.remove('player-enter'), 600);
-        }
+        this.tableManager.animatePlayerJoin(msg.player.id);
     }
 
     onPlayerLeft(msg) {
-        // Animate player leaving
-        const playerEl = this.elements.playersContainer.querySelector(`[data-player-id="${msg.playerId}"]`);
-        if (playerEl) {
-            playerEl.classList.add('player-exit');
-            setTimeout(() => {
-                this.updateState(msg.roomState);
-            }, 400);
-        } else {
+        this.tableManager.animatePlayerExit(msg.playerId, () => {
             this.updateState(msg.roomState);
-        }
+        });
     }
 
     onBecameHost() {
         this.isHost = true;
         this.elements.hostControls.classList.remove('hidden');
         this.updateUI();
-        this.renderPlayers(); // Re-render to show make host buttons
-    }
-
-    transferHost(playerId) {
-        if (!this.isHost) return;
-        wsClient.send('transfer_host', { playerId });
+        this.renderPlayers();
     }
 
     onHostTransferred(msg) {
-        // Check if I'm the new host
         if (msg.newHostId === this.playerId) {
             this.isHost = true;
             this.elements.hostControls.classList.remove('hidden');
         } else if (this.isHost) {
-            // I was the host but no longer am
             this.isHost = false;
             this.elements.hostControls.classList.add('hidden');
         }
-        this.updateState(msg.roomState);
-    }
-
-    playRevealAnimation(revealOrder) {
-        const overlay = this.elements.revealOverlay;
-        const container = this.elements.revealCards;
-
-        overlay.classList.remove('hidden');
-        overlay.classList.add('active');
-        container.innerHTML = '';
-
-        // Phase 1: Dramatic countdown
-        const countdownEl = document.createElement('div');
-        countdownEl.className = 'reveal-countdown';
-        countdownEl.innerHTML = '<span class="countdown-text">REVEALING...</span>';
-        container.appendChild(countdownEl);
-
-        // Phase 2: After countdown, show cards
-        setTimeout(() => {
-            container.innerHTML = '';
-
-            // Add dramatic title
-            const titleEl = document.createElement('div');
-            titleEl.className = 'reveal-title';
-            titleEl.innerHTML = '🃏 THE RESULTS 🃏';
-            container.appendChild(titleEl);
-
-            // Create card container
-            const cardsWrapper = document.createElement('div');
-            cardsWrapper.className = 'reveal-cards-wrapper';
-            container.appendChild(cardsWrapper);
-
-            // Create cards for reveal animation
-            revealOrder.forEach((player, index) => {
-                const cardEl = document.createElement('div');
-                cardEl.className = 'reveal-card';
-                cardEl.style.setProperty('--reveal-index', index);
-                cardEl.style.setProperty('--total-cards', revealOrder.length);
-
-                cardEl.innerHTML = `
-                    <div class="reveal-player-name">${player.name}</div>
-                    <div class="card flip-reveal">
-                        <div class="card-inner">
-                            <div class="card-front">
-                                <span class="card-value">${player.card !== null ? player.card : '?'}</span>
-                            </div>
-                            <div class="card-back">
-                                <span class="back-pattern">🃏</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="reveal-spark"></div>
-                `;
-
-                cardsWrapper.appendChild(cardEl);
-            });
-
-            const cards = cardsWrapper.querySelectorAll('.reveal-card');
-            cards.forEach((card, i) => {
-                // Spotlight on each card before flip
-                setTimeout(() => {
-                    card.classList.add('spotlight');
-                }, 100 + i * 250);
-
-                // Flip the card
-                setTimeout(() => {
-                    card.classList.add('revealed');
-                    card.classList.add('flip-now');
-                    // Add impact effect
-                    setTimeout(() => card.classList.add('impact'), 200);
-                }, 250 + i * 250);
-            });
-
-            const summaryDelay = 250 + (revealOrder.length * 250) + 500;
-
-            setTimeout(() => {
-                // Calculate stats
-                const votes = revealOrder.filter(p => p.card !== null && p.card !== '?' && p.card !== '☕');
-
-                const summaryEl = document.createElement('div');
-                summaryEl.className = 'reveal-summary';
-                summaryEl.innerHTML = `
-                    <div class="summary-stat">
-                        <span class="stat-value">${votes.length}</span>
-                        <span class="stat-label">Votes</span>
-                    </div>
-                `;
-
-                // Check if all players reached a consensus
-                if (this.checkConsensus(revealOrder)) {
-                    // Add consensus badge to the summary
-                    const consensusBadge = document.createElement('div');
-                    consensusBadge.className = 'summary-stat';
-                    consensusBadge.style.borderColor = 'var(--success)';
-                    consensusBadge.style.boxShadow = '0 0 20px rgba(16, 185, 129, 0.3)';
-                    consensusBadge.innerHTML = `
-                        <span class="stat-value">🎉</span>
-                        <span class="stat-label" style="color: var(--success); font-weight: 700;">Consensus!</span>
-                    `;
-                    summaryEl.appendChild(consensusBadge);
-                    
-                    // Trigger confetti
-                    triggerConfetti();
-                }
-
-                container.appendChild(summaryEl);
-
-                // Add close button (only visible to host)
-                if (this.isHost) {
-                    const closeBtn = document.createElement('button');
-                    closeBtn.className = 'reveal-close-btn';
-                    closeBtn.innerHTML = '✓ Continue to Discussion';
-                    closeBtn.addEventListener('click', () => this.hostCloseReveal());
-                    container.appendChild(closeBtn);
-                }
-
-            }, summaryDelay);
-
-        }, 300);
-
-    }
-
-    hostCloseReveal() {
-        // Host sends close message to all players
-        wsClient.send('close_reveal');
-        this.closeRevealOverlay();
-    }
-
-    onRevealClosed() {
-        // Called when host closes reveal - close overlay for everyone
-        this.closeRevealOverlay();
-    }
-
-    closeRevealOverlay() {
-        const overlay = this.elements.revealOverlay;
-        overlay.classList.add('fade-out');
-        setTimeout(() => {
-            overlay.classList.add('hidden');
-            overlay.classList.remove('fade-out', 'active');
-        }, 600);
-    }
-
-    onPlayerDisconnected(msg) {
-        this.updateState(msg.roomState);
-    }
-
-    onPlayerReconnected(msg) {
-        this.updateState(msg.roomState);
-    }
-
-    checkConsensus(revealOrder) {
-        const activeVotes = revealOrder.filter(p => p.card !== null && p.card !== '?' && p.card !== '☕');
-        if (activeVotes.length <= 1) return false;
-
-        const firstVote = activeVotes[0].card;
-        return activeVotes.every(p => p.card === firstVote);
-    }
-
-    // =========================================================================
-    // AVATAR CUSTOMIZER & REROLL
-    // =========================================================================
-    quickRerollAvatar() {
-        const allEmojis = Object.values(EMOJI_CATEGORIES).flat();
-        const randomEmoji = allEmojis[Math.floor(Math.random() * allEmojis.length)];
-        const randomGradient = GRADIENT_PALETTE[Math.floor(Math.random() * GRADIENT_PALETTE.length)];
-
-        wsClient.send('update_avatar', {
-            avatar: randomEmoji,
-            color: randomGradient
-        });
-    }
-
-    openAvatarModal(currentAvatar, currentColor) {
-        this.selectedAvatarEmoji = currentAvatar || '🐱';
-        this.selectedAvatarGradient = currentColor || GRADIENT_PALETTE[0];
-
-        this.updateAvatarPreview();
-        this.renderEmojiGrid();
-        this.renderGradientPalette();
-
-        if (this.elements.avatarModal) {
-            this.elements.avatarModal.classList.remove('hidden');
-        }
-    }
-
-    closeAvatarModal() {
-        if (this.elements.avatarModal) {
-            this.elements.avatarModal.classList.add('hidden');
-        }
-    }
-
-    updateAvatarPreview() {
-        if (this.elements.avatarPreviewEmoji) {
-            this.elements.avatarPreviewEmoji.textContent = this.selectedAvatarEmoji;
-        }
-        if (this.elements.avatarPreview) {
-            this.elements.avatarPreview.style.background = this.selectedAvatarGradient;
-        }
-    }
-
-    renderEmojiGrid() {
-        const container = this.elements.emojiGrid;
-        if (!container) return;
-
-        container.innerHTML = '';
-        const list = EMOJI_CATEGORIES[this.activeEmojiTab] || EMOJI_CATEGORIES.animals;
-
-        list.forEach(emoji => {
-            const btn = document.createElement('button');
-            btn.className = `emoji-option ${this.selectedAvatarEmoji === emoji ? 'selected' : ''}`;
-            btn.textContent = emoji;
-            btn.addEventListener('click', () => {
-                this.selectedAvatarEmoji = emoji;
-                container.querySelectorAll('.emoji-option').forEach(b => b.classList.remove('selected'));
-                btn.classList.add('selected');
-                this.updateAvatarPreview();
-            });
-            container.appendChild(btn);
-        });
-    }
-
-    renderGradientPalette() {
-        const container = this.elements.gradientPalette;
-        if (!container) return;
-
-        container.innerHTML = '';
-
-        GRADIENT_PALETTE.forEach(gradient => {
-            const swatch = document.createElement('div');
-            swatch.className = `gradient-swatch ${this.selectedAvatarGradient === gradient ? 'selected' : ''}`;
-            swatch.style.background = gradient;
-            swatch.addEventListener('click', () => {
-                this.selectedAvatarGradient = gradient;
-                container.querySelectorAll('.gradient-swatch').forEach(s => s.classList.remove('selected'));
-                swatch.classList.add('selected');
-                this.updateAvatarPreview();
-            });
-            container.appendChild(swatch);
-        });
-    }
-
-    rerollAvatarModal() {
-        const allEmojis = Object.values(EMOJI_CATEGORIES).flat();
-        this.selectedAvatarEmoji = allEmojis[Math.floor(Math.random() * allEmojis.length)];
-        this.selectedAvatarGradient = GRADIENT_PALETTE[Math.floor(Math.random() * GRADIENT_PALETTE.length)];
-
-        this.updateAvatarPreview();
-        this.renderEmojiGrid();
-        this.renderGradientPalette();
-    }
-
-    saveAvatar() {
-        wsClient.send('update_avatar', {
-            avatar: this.selectedAvatarEmoji,
-            color: this.selectedAvatarGradient
-        });
-        this.closeAvatarModal();
-    }
-
-    onAvatarUpdated(msg) {
         this.updateState(msg.roomState);
     }
 }

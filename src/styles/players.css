@@ -11,6 +11,8 @@
     transform: translate(-50%, -50%);
     transition: all var(--transition-base);
     z-index: 5;
+    contain: layout style;
+    will-change: transform;
 }
 
 /* Entry animation */
