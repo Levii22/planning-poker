@@ -1,5 +1,5 @@
 // Results Reveal & Consensus Animation Manager
-import { triggerConfetti } from './confetti.js';
+import { triggerConfetti, stopConfetti } from './confetti.js';
 import { soundManager } from './audio.js';
 import { wsClient } from './websocket.js';
 
@@ -7,6 +7,21 @@ export class RevealManager {
     constructor(overlayElement, containerElement) {
         this.overlay = overlayElement || document.getElementById('revealOverlay');
         this.container = containerElement || document.getElementById('revealCards');
+        this.activeTimeouts = new Set();
+    }
+
+    scheduleTimeout(fn, delay) {
+        const id = setTimeout(() => {
+            this.activeTimeouts.delete(id);
+            fn();
+        }, delay);
+        this.activeTimeouts.add(id);
+        return id;
+    }
+
+    clearTimeouts() {
+        this.activeTimeouts.forEach(id => clearTimeout(id));
+        this.activeTimeouts.clear();
     }
 
     checkConsensus(revealOrder) {
@@ -20,7 +35,8 @@ export class RevealManager {
     playRevealAnimation(revealOrder, isHost) {
         if (!this.overlay || !this.container) return;
 
-        this.overlay.classList.remove('hidden');
+        this.clearTimeouts();
+        this.overlay.classList.remove('hidden', 'fade-out');
         this.overlay.classList.add('active');
         this.container.innerHTML = '';
 
@@ -31,7 +47,7 @@ export class RevealManager {
         this.container.appendChild(countdownEl);
 
         // Phase 2: After countdown, show cards
-        setTimeout(() => {
+        this.scheduleTimeout(() => {
             this.container.innerHTML = '';
 
             // Add dramatic title
@@ -73,23 +89,23 @@ export class RevealManager {
             const cards = cardsWrapper.querySelectorAll('.reveal-card');
             cards.forEach((card, i) => {
                 // Spotlight on each card before flip
-                setTimeout(() => {
+                this.scheduleTimeout(() => {
                     card.classList.add('spotlight');
                 }, 100 + i * 250);
 
                 // Flip the card
-                setTimeout(() => {
+                this.scheduleTimeout(() => {
                     card.classList.add('revealed');
                     card.classList.add('flip-now');
                     soundManager.playCardFlip();
                     // Add impact effect
-                    setTimeout(() => card.classList.add('impact'), 200);
+                    this.scheduleTimeout(() => card.classList.add('impact'), 200);
                 }, 250 + i * 250);
             });
 
             const summaryDelay = 250 + (revealOrder.length * 250) + 500;
 
-            setTimeout(() => {
+            this.scheduleTimeout(() => {
                 // Calculate stats
                 const votes = revealOrder.filter(p => p.card !== null && p.card !== '?' && p.card !== '☕');
 
@@ -113,7 +129,7 @@ export class RevealManager {
                         <span class="stat-label" style="color: var(--success); font-weight: 700;">Consensus!</span>
                     `;
                     summaryEl.appendChild(consensusBadge);
-                    
+
                     // Trigger confetti & fanfare audio
                     triggerConfetti();
                     soundManager.playConsensus();
@@ -139,11 +155,16 @@ export class RevealManager {
     }
 
     closeOverlay() {
+        this.clearTimeouts();
+        stopConfetti();
         if (!this.overlay) return;
         this.overlay.classList.add('fade-out');
-        setTimeout(() => {
+        this.scheduleTimeout(() => {
             this.overlay.classList.add('hidden');
             this.overlay.classList.remove('fade-out', 'active');
+            if (this.container) {
+                this.container.innerHTML = '';
+            }
         }, 600);
     }
 

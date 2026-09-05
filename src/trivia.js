@@ -39,21 +39,32 @@ export const AGILE_JOKES = [
 export class TriviaTicker {
     constructor(tickerElementId) {
         this.tickerElementId = tickerElementId;
+        this.tickerEl = null;
         this.triviaInterval = null;
+        this.fadeTimeout = null;
         this.currentTriviaIndex = Math.floor(Math.random() * AGILE_JOKES.length);
+    }
+
+    getElement() {
+        if (!this.tickerEl) {
+            this.tickerEl = document.getElementById(this.tickerElementId);
+        }
+        return this.tickerEl;
     }
 
     start() {
         if (this.triviaInterval) return;
         this.triviaInterval = setInterval(() => {
             this.currentTriviaIndex = (this.currentTriviaIndex + 1) % AGILE_JOKES.length;
-            const tickerEl = document.getElementById(this.tickerElementId);
+            const tickerEl = this.getElement();
             if (tickerEl) {
                 tickerEl.style.transition = 'opacity 0.3s ease';
-                tickerEl.style.opacity = 0;
-                setTimeout(() => {
+                tickerEl.style.opacity = '0';
+                if (this.fadeTimeout) clearTimeout(this.fadeTimeout);
+                this.fadeTimeout = setTimeout(() => {
                     tickerEl.textContent = AGILE_JOKES[this.currentTriviaIndex];
-                    tickerEl.style.opacity = 0.85;
+                    tickerEl.style.opacity = '0.85';
+                    this.fadeTimeout = null;
                 }, 300);
             }
         }, 12000);
@@ -63,6 +74,10 @@ export class TriviaTicker {
         if (this.triviaInterval) {
             clearInterval(this.triviaInterval);
             this.triviaInterval = null;
+        }
+        if (this.fadeTimeout) {
+            clearTimeout(this.fadeTimeout);
+            this.fadeTimeout = null;
         }
     }
 

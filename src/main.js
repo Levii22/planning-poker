@@ -73,17 +73,64 @@ async function init() {
   }
 }
 
+let errorTimeoutId = null;
+
+function resetLobbyButtons() {
+  createRoomBtn.disabled = false;
+  joinRoomBtn.disabled = false;
+  createRoomBtn.querySelector('.btn-text').textContent = 'Create Room';
+  joinRoomBtn.querySelector('.btn-text').textContent = 'Join Room';
+}
+
+function showLobbyView() {
+  game.cleanup();
+
+  const url = new URL(window.location.href);
+  url.searchParams.delete('room');
+  window.history.replaceState({}, '', url);
+
+  lobbyView.classList.remove('hidden');
+  lobbyView.classList.add('active');
+  gameView.classList.remove('active');
+  gameView.classList.add('hidden');
+
+  resetLobbyButtons();
+}
+
+function showGameView(roomCode) {
+  lobbyView.classList.remove('active');
+  lobbyView.classList.add('hidden');
+  gameView.classList.add('active');
+  gameView.classList.remove('hidden');
+
+  const url = new URL(window.location.href);
+  url.searchParams.set('room', roomCode);
+  window.history.replaceState({}, '', url);
+
+  resetLobbyButtons();
+}
+
 function setupEventListeners() {
   createRoomBtn.addEventListener('click', createRoom);
   joinRoomBtn.addEventListener('click', joinRoom);
   exitRoomBtn.addEventListener('click', exitRoom);
 
-  // Enter key support
-  hostNameInput.addEventListener('keypress', (e) => {
+  // Modern Enter key handling
+  hostNameInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') createRoom();
   });
 
-  roomCodeInput.addEventListener('keypress', (e) => {
+  playerNameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      if (roomCodeInput.value.trim().length === 4) {
+        joinRoom();
+      } else {
+        roomCodeInput.focus();
+      }
+    }
+  });
+
+  roomCodeInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') joinRoom();
   });
 
@@ -110,18 +157,7 @@ function setupWebSocketHandlers() {
   wsClient.on('session_expired', (msg) => {
     console.warn('⚠️ Session expired:', msg.message);
     wsClient.clearSession();
-    
-    // Clear URL param
-    const url = new URL(window.location.href);
-    url.searchParams.delete('room');
-    window.history.replaceState({}, '', url);
-
-    // Switch view back to lobby
-    lobbyView.classList.remove('hidden');
-    lobbyView.classList.add('active');
-    gameView.classList.remove('active');
-    gameView.classList.add('hidden');
-
+    showLobbyView();
     showError(msg.message || 'Session expired');
   });
 
@@ -157,17 +193,8 @@ function setupWebSocketHandlers() {
     isConnected = false;
     updateConnectionStatus('disconnected');
     
-    // Clear session and return to lobby
     wsClient.clearSession();
-    const url = new URL(window.location.href);
-    url.searchParams.delete('room');
-    window.history.replaceState({}, '', url);
-
-    lobbyView.classList.remove('hidden');
-    lobbyView.classList.add('active');
-    gameView.classList.remove('active');
-    gameView.classList.add('hidden');
-
+    showLobbyView();
     showError('Connection lost. Returning to lobby.');
   });
 }
@@ -217,23 +244,8 @@ function joinRoom() {
 }
 
 function switchToGame(roomCode, playerId, isHost, roomState) {
-  lobbyView.classList.remove('active');
-  lobbyView.classList.add('hidden');
-  gameView.classList.add('active');
-  gameView.classList.remove('hidden');
-
-  const url = new URL(window.location.href);
-  url.searchParams.set('room', roomCode);
-  window.history.replaceState({}, '', url);
-
-  // Initialize game
+  showGameView(roomCode);
   game.initialize(roomCode, playerId, isHost, roomState);
-
-  // Reset lobby buttons
-  createRoomBtn.disabled = false;
-  joinRoomBtn.disabled = false;
-  createRoomBtn.querySelector('.btn-text').textContent = 'Create Room';
-  joinRoomBtn.querySelector('.btn-text').textContent = 'Join Room';
 }
 
 function exitRoom() {
@@ -252,17 +264,7 @@ function exitRoom() {
     }
   }
 
-  // Clear room query parameter from URL
-  const url = new URL(window.location.href);
-  url.searchParams.delete('room');
-  window.history.replaceState({}, '', url);
-
-  // Switch back to lobby view
-  lobbyView.classList.remove('hidden');
-  lobbyView.classList.add('active');
-  gameView.classList.remove('active');
-  gameView.classList.add('hidden');
-
+  showLobbyView();
   console.log('🚪 Left room voluntarily. Returned to lobby.');
 
   // Open a fresh socket for lobby state (creating/joining future rooms)
@@ -273,14 +275,15 @@ function showError(message) {
   errorMessage.textContent = message;
   errorMessage.classList.add('visible');
 
-  // Reset buttons
-  createRoomBtn.disabled = false;
-  joinRoomBtn.disabled = false;
-  createRoomBtn.querySelector('.btn-text').textContent = 'Create Room';
-  joinRoomBtn.querySelector('.btn-text').textContent = 'Join Room';
+  resetLobbyButtons();
 
-  setTimeout(() => {
+  if (errorTimeoutId) {
+    clearTimeout(errorTimeoutId);
+  }
+
+  errorTimeoutId = setTimeout(() => {
     errorMessage.classList.remove('visible');
+    errorTimeoutId = null;
   }, 4000);
 }
 

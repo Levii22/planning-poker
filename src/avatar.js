@@ -38,6 +38,7 @@ export class AvatarManager {
             saveAvatarBtn: document.getElementById('saveAvatarBtn')
         };
 
+        this.initGradientPalette();
         this.bindEvents();
     }
 
@@ -48,14 +49,75 @@ export class AvatarManager {
         this.elements.saveAvatarBtn?.addEventListener('click', () => this.saveAvatar());
         this.elements.modalRerollBtn?.addEventListener('click', () => this.rerollAvatarModal());
 
-        // Category Tab Switching
-        this.elements.avatarModal.querySelectorAll('.tab-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                this.elements.avatarModal.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                this.activeEmojiTab = btn.dataset.tab;
-                this.renderEmojiGrid();
-            });
+        // Event delegation for category tab switching
+        const tabsContainer = this.elements.avatarModal.querySelector('.emoji-tabs');
+        tabsContainer?.addEventListener('click', (e) => {
+            const btn = e.target.closest('.tab-btn');
+            if (!btn || btn.classList.contains('active')) return;
+
+            tabsContainer.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            this.activeEmojiTab = btn.dataset.tab;
+            this.renderEmojiGrid();
+        });
+
+        // Event delegation for emoji grid clicks
+        this.elements.emojiGrid?.addEventListener('click', (e) => {
+            const btn = e.target.closest('.emoji-option');
+            if (!btn) return;
+
+            this.selectedAvatarEmoji = btn.textContent.trim();
+            this.elements.emojiGrid.querySelectorAll('.emoji-option').forEach(b => b.classList.remove('selected'));
+            btn.classList.add('selected');
+            this.updateAvatarPreview();
+        });
+
+        // Event delegation for gradient palette clicks
+        this.elements.gradientPalette?.addEventListener('click', (e) => {
+            const swatch = e.target.closest('.gradient-swatch');
+            if (!swatch) return;
+
+            this.selectedAvatarGradient = swatch.dataset.gradient;
+            this.syncGradientSelection();
+            this.updateAvatarPreview();
+        });
+
+        // Close on escape key
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && this.isOpen()) {
+                this.closeAvatarModal();
+            }
+        });
+    }
+
+    isOpen() {
+        return this.elements.avatarModal && !this.elements.avatarModal.classList.contains('hidden');
+    }
+
+    initGradientPalette() {
+        const container = this.elements.gradientPalette;
+        if (!container || container.children.length > 0) return;
+
+        container.innerHTML = '';
+        const fragment = document.createDocumentFragment();
+
+        GRADIENT_PALETTE.forEach(gradient => {
+            const swatch = document.createElement('div');
+            swatch.className = 'gradient-swatch';
+            swatch.dataset.gradient = gradient;
+            swatch.style.background = gradient;
+            fragment.appendChild(swatch);
+        });
+
+        container.appendChild(fragment);
+    }
+
+    syncGradientSelection() {
+        const container = this.elements.gradientPalette;
+        if (!container) return;
+
+        container.querySelectorAll('.gradient-swatch').forEach(s => {
+            s.classList.toggle('selected', s.dataset.gradient === this.selectedAvatarGradient);
         });
     }
 
@@ -76,7 +138,7 @@ export class AvatarManager {
 
         this.updateAvatarPreview();
         this.renderEmojiGrid();
-        this.renderGradientPalette();
+        this.syncGradientSelection();
 
         if (this.elements.avatarModal) {
             this.elements.avatarModal.classList.remove('hidden');
@@ -102,41 +164,18 @@ export class AvatarManager {
         const container = this.elements.emojiGrid;
         if (!container) return;
 
-        container.innerHTML = '';
         const list = EMOJI_CATEGORIES[this.activeEmojiTab] || EMOJI_CATEGORIES.animals;
+        const fragment = document.createDocumentFragment();
 
         list.forEach(emoji => {
             const btn = document.createElement('button');
             btn.className = `emoji-option ${this.selectedAvatarEmoji === emoji ? 'selected' : ''}`;
             btn.textContent = emoji;
-            btn.addEventListener('click', () => {
-                this.selectedAvatarEmoji = emoji;
-                container.querySelectorAll('.emoji-option').forEach(b => b.classList.remove('selected'));
-                btn.classList.add('selected');
-                this.updateAvatarPreview();
-            });
-            container.appendChild(btn);
+            fragment.appendChild(btn);
         });
-    }
-
-    renderGradientPalette() {
-        const container = this.elements.gradientPalette;
-        if (!container) return;
 
         container.innerHTML = '';
-
-        GRADIENT_PALETTE.forEach(gradient => {
-            const swatch = document.createElement('div');
-            swatch.className = `gradient-swatch ${this.selectedAvatarGradient === gradient ? 'selected' : ''}`;
-            swatch.style.background = gradient;
-            swatch.addEventListener('click', () => {
-                this.selectedAvatarGradient = gradient;
-                container.querySelectorAll('.gradient-swatch').forEach(s => s.classList.remove('selected'));
-                swatch.classList.add('selected');
-                this.updateAvatarPreview();
-            });
-            container.appendChild(swatch);
-        });
+        container.appendChild(fragment);
     }
 
     rerollAvatarModal() {
@@ -146,7 +185,7 @@ export class AvatarManager {
 
         this.updateAvatarPreview();
         this.renderEmojiGrid();
-        this.renderGradientPalette();
+        this.syncGradientSelection();
     }
 
     saveAvatar() {

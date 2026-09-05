@@ -1,12 +1,17 @@
 // Card Deck & Flying Card Animation Manager
 import { wsClient } from './websocket.js';
-import { soundManager } from './audio.js';
 
 export class DeckManager {
-    constructor(deckContainer, cardsContainer) {
+    constructor(deckContainer, cardsContainer, tableManager = null) {
         this.deckContainer = deckContainer || document.getElementById('cardDeck');
         this.cardsContainer = cardsContainer || document.getElementById('deckCards');
+        this.tableManager = tableManager;
         this.selectedCard = null;
+        this.activeFlight = null;
+    }
+
+    setTableManager(tableManager) {
+        this.tableManager = tableManager;
     }
 
     renderDeck(cardValues, onCardSelected) {
@@ -38,20 +43,19 @@ export class DeckManager {
     }
 
     selectCard(value, cardEl, onCardSelected) {
-        // Clear previous selected card visual
+        // Clear previous selected card visuals
         this.cardsContainer?.querySelectorAll('.deck-card').forEach(c => {
-            c.classList.remove('selected');
+            c.classList.remove('selected', 'picked-pop');
         });
 
-        // Set active card
-        cardEl.classList.add('selected');
+        // Set active card with interactive pop feedback
+        cardEl.classList.add('selected', 'picked-pop');
+        setTimeout(() => cardEl.classList.remove('picked-pop'), 400);
+
         this.selectedCard = value;
 
-        // Play audio FX
-        soundManager.playCardSelect();
-
-        // Animate card flying to player seat
-        this.animateCardSelection(cardEl);
+        // Animate card flying to player seat with smooth flip & parabolic arc (Silent)
+        this.animateCardSelection(cardEl, value);
 
         // Send to WebSocket
         wsClient.send('select_card', { card: value });
@@ -59,44 +63,130 @@ export class DeckManager {
         onCardSelected?.(value);
     }
 
-    animateCardSelection(cardEl) {
+    animateCardSelection(cardEl, value) {
+        // Cancel any active flight in progress
+        if (this.activeFlight) {
+            try {
+                this.activeFlight.cancel();
+            } catch (e) {}
+            this.activeFlight = null;
+        }
+
         const rect = cardEl.getBoundingClientRect();
-        const clone = cardEl.cloneNode(true);
-        clone.className = 'flying-card';
-        clone.style.cssText = `
+
+        // Find current player's card slot
+        const myPlayerSlot = document.querySelector('.player.is-me .card-placeholder');
+        if (!myPlayerSlot) {
+            return;
+        }
+
+        const targetRect = myPlayerSlot.getBoundingClientRect();
+        if (!targetRect || targetRect.width === 0 || targetRect.height === 0) {
+            return;
+        }
+
+        // Notify TableManager that local flight is starting
+        this.tableManager?.onFlightStart?.(value);
+
+        const flyingCard = document.createElement('div');
+        flyingCard.className = 'flying-card';
+        flyingCard.style.cssText = `
             position: fixed;
             left: ${rect.left}px;
             top: ${rect.top}px;
             width: ${rect.width}px;
             height: ${rect.height}px;
-            z-index: 1000;
+            z-index: 9999;
             pointer-events: none;
+            perspective: 800px;
+            transform-origin: center center;
+            will-change: transform;
         `;
 
-        document.body.appendChild(clone);
+        flyingCard.innerHTML = `
+            <div class="flying-card-inner">
+                <div class="flying-card-face flying-card-front">
+                    <span class="flying-card-value">${value}</span>
+                </div>
+                <div class="flying-card-face flying-card-back">
+                    <span class="flying-card-back-pattern">🃏</span>
+                </div>
+            </div>
+        `;
 
-        // Find current player's card slot
-        const myPlayerSlot = document.querySelector('.player.is-me .card-placeholder');
-        if (myPlayerSlot) {
-            const targetRect = myPlayerSlot.getBoundingClientRect();
+        document.body.appendChild(flyingCard);
 
-            requestAnimationFrame(() => {
-                clone.style.transition = 'all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)';
-                clone.style.left = `${targetRect.left}px`;
-                clone.style.top = `${targetRect.top}px`;
-                clone.style.transform = 'scale(0.6) rotateY(180deg)';
-            });
+        // Center-to-center delta
+        const startCenterX = rect.left + rect.width / 2;
+        const startCenterY = rect.top + rect.height / 2;
+        const targetCenterX = targetRect.left + targetRect.width / 2;
+        const targetCenterY = targetRect.top + targetRect.height / 2;
 
-            setTimeout(() => clone.remove(), 600);
-        } else {
-            clone.remove();
-        }
+        const deltaX = targetCenterX - startCenterX;
+        const deltaY = targetCenterY - startCenterY;
+        const targetScale = targetRect.width / rect.width;
+
+        // Smooth parabolic arc + clean horizontal flip
+        const keyframes = [
+            {
+                transform: 'translate3d(0, 0, 0) scale(1) rotateY(0deg)',
+                offset: 0
+            },
+            {
+                // Mid-flight: lift slightly upward into arc, flip to edge-on
+                transform: `translate3d(${deltaX * 0.5}px, ${deltaY * 0.5 - 32}px, 0) scale(1.05) rotateY(90deg)`,
+                offset: 0.5
+            },
+            {
+                // Touchdown: land in slot, face-down
+                transform: `translate3d(${deltaX}px, ${deltaY}px, 0) scale(${targetScale}) rotateY(180deg)`,
+                offset: 1
+            }
+        ];
+
+        const animation = flyingCard.animate(keyframes, {
+            duration: 380,
+            easing: 'cubic-bezier(0.2, 0.9, 0.3, 1)',
+            fill: 'forwards'
+        });
+
+        const cleanup = () => {
+            if (flyingCard.parentNode) {
+                flyingCard.remove();
+            }
+            if (this.activeFlight?.animation === animation) {
+                this.activeFlight = null;
+            }
+        };
+
+        this.activeFlight = {
+            animation,
+            cancel: () => {
+                try {
+                    animation.cancel();
+                } catch (e) {}
+                cleanup();
+            }
+        };
+
+        animation.onfinish = () => {
+            this.tableManager?.onFlightLand?.(value);
+            cleanup();
+        };
+
+        animation.oncancel = () => {
+            cleanup();
+        };
     }
 
     reset() {
         this.selectedCard = null;
+        if (this.activeFlight) {
+            this.activeFlight.cancel();
+            this.activeFlight = null;
+        }
         this.cardsContainer?.querySelectorAll('.deck-card').forEach(c => {
-            c.classList.remove('selected');
+            c.classList.remove('selected', 'picked-pop');
         });
     }
 

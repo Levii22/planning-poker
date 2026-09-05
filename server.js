@@ -195,19 +195,17 @@ function getRoomState(roomCode, includeVotes = false) {
     const room = rooms.get(roomCode);
     if (!room) return null;
 
-    const playersList = [];
-    room.players.forEach((player) => {
-        playersList.push({
-            id: player.id,
-            name: player.name,
-            isHost: player.isHost,
-            hasSelected: player.selectedCard !== null,
-            card: includeVotes || room.state === 'revealed' ? player.selectedCard : null,
-            active: player.ws !== null,
-            avatar: player.avatar,
-            color: player.color
-        });
-    });
+    const isRevealed = includeVotes || room.state === 'revealed';
+    const playersList = Array.from(room.players.values()).map((player) => ({
+        id: player.id,
+        name: player.name,
+        isHost: player.isHost,
+        hasSelected: player.selectedCard !== null,
+        card: isRevealed ? player.selectedCard : null,
+        active: player.ws !== null,
+        avatar: player.avatar,
+        color: player.color
+    }));
 
     return {
         roomCode,
@@ -220,22 +218,76 @@ function getRoomState(roomCode, includeVotes = false) {
 
 // Get sorted list of players for reveal
 function getSortedRevealOrder(room) {
-    const revealOrder = [];
-    room.players.forEach((p) => {
-        revealOrder.push({
+    return Array.from(room.players.values())
+        .map((p) => ({
             id: p.id,
             name: p.name,
             card: p.selectedCard
+        }))
+        .sort((a, b) => {
+            const aVal = a.card === null ? -1000 : CARD_VALUES.indexOf(a.card);
+            const bVal = b.card === null ? -1000 : CARD_VALUES.indexOf(b.card);
+            return bVal - aVal;
         });
-    });
+}
 
-    revealOrder.sort((a, b) => {
-        const aVal = a.card === null ? -1000 : CARD_VALUES.indexOf(a.card);
-        const bVal = b.card === null ? -1000 : CARD_VALUES.indexOf(b.card);
-        return bVal - aVal;
-    });
+// Reassign host to the next active player or any remaining player
+function reassignHost(room) {
+    if (!room || room.players.size === 0) return null;
 
-    return revealOrder;
+    let newHost = null;
+    for (const p of room.players.values()) {
+        if (p.ws !== null) {
+            newHost = p;
+            break;
+        }
+    }
+    if (!newHost) {
+        newHost = room.players.values().next().value;
+    }
+    if (newHost) {
+        newHost.isHost = true;
+        room.hostId = newHost.id;
+        if (newHost.ws && newHost.ws.readyState === 1) {
+            newHost.ws.send(JSON.stringify({ type: 'became_host' }));
+        }
+    }
+    return newHost;
+}
+
+// Completely remove player from room, adjust votes, reassign host, and broadcast
+function removePlayerFromRoom(roomCode, playerId) {
+    if (disconnectTimeouts.has(playerId)) {
+        clearTimeout(disconnectTimeouts.get(playerId));
+        disconnectTimeouts.delete(playerId);
+    }
+
+    const room = rooms.get(roomCode);
+    if (!room) return;
+
+    const player = room.players.get(playerId);
+    if (!player) return;
+
+    room.players.delete(playerId);
+
+    if (player.selectedCard !== null) {
+        room.voteCount = Math.max(0, (room.voteCount || 0) - 1);
+    }
+
+    if (player.isHost && room.players.size > 0) {
+        reassignHost(room);
+    }
+
+    if (room.players.size === 0) {
+        rooms.delete(roomCode);
+        console.log(`Room ${roomCode} deleted - no players remaining`);
+    } else {
+        broadcastToRoom(roomCode, {
+            type: 'player_left',
+            playerId,
+            roomState: getRoomState(roomCode)
+        });
+    }
 }
 
 wss.on('connection', (ws, req) => {
@@ -307,45 +359,7 @@ wss.on('connection', (ws, req) => {
                         const currentPlayer = currentRoom.players.get(player.id);
                         // Only clean up if they haven't reconnected (ws is still null)
                         if (currentPlayer && currentPlayer.ws === null) {
-                            currentRoom.players.delete(player.id);
-
-                            if (currentPlayer.selectedCard !== null) {
-                                currentRoom.voteCount = Math.max(0, (currentRoom.voteCount || 0) - 1);
-                            }
-
-                            // If host left, assign new host or close room
-                            if (currentPlayer.isHost && currentRoom.players.size > 0) {
-                                // Find first active player
-                                let newHost = null;
-                                for (const p of currentRoom.players.values()) {
-                                    if (p.ws !== null) {
-                                        newHost = p;
-                                        break;
-                                    }
-                                }
-                                // Fallback to any player
-                                if (!newHost) {
-                                    newHost = currentRoom.players.values().next().value;
-                                }
-                                if (newHost) {
-                                    newHost.isHost = true;
-                                    currentRoom.hostId = newHost.id;
-                                    if (newHost.ws && newHost.ws.readyState === 1) {
-                                        newHost.ws.send(JSON.stringify({ type: 'became_host' }));
-                                    }
-                                }
-                            }
-
-                            if (currentRoom.players.size === 0) {
-                                rooms.delete(player.roomCode);
-                                console.log(`Room ${player.roomCode} deleted - no players after grace period`);
-                            } else {
-                                broadcastToRoom(player.roomCode, {
-                                    type: 'player_left',
-                                    playerId: player.id,
-                                    roomState: getRoomState(player.roomCode)
-                                });
-                            }
+                            removePlayerFromRoom(player.roomCode, player.id);
                         }
                     }
                 }, GRACE_PERIOD);
@@ -788,46 +802,7 @@ function handleMessage(ws, message) {
         case 'leave': {
             const player = players.get(ws);
             if (player) {
-                const room = rooms.get(player.roomCode);
-                if (room) {
-                    room.players.delete(player.id);
-
-                    if (player.selectedCard !== null) {
-                        room.voteCount = Math.max(0, (room.voteCount || 0) - 1);
-                    }
-
-                    // If host left, assign new host or close room
-                    if (player.isHost && room.players.size > 0) {
-                        let newHost = null;
-                        for (const p of room.players.values()) {
-                            if (p.ws !== null) {
-                                newHost = p;
-                                break;
-                            }
-                        }
-                        if (!newHost) {
-                            newHost = room.players.values().next().value;
-                        }
-                        if (newHost) {
-                            newHost.isHost = true;
-                            room.hostId = newHost.id;
-                            if (newHost.ws && newHost.ws.readyState === 1) {
-                                newHost.ws.send(JSON.stringify({ type: 'became_host' }));
-                            }
-                        }
-                    }
-
-                    if (room.players.size === 0) {
-                        rooms.delete(player.roomCode);
-                        console.log(`Room ${player.roomCode} deleted - player voluntarily left`);
-                    } else {
-                        broadcastToRoom(player.roomCode, {
-                            type: 'player_left',
-                            playerId: player.id,
-                            roomState: getRoomState(player.roomCode)
-                        });
-                    }
-                }
+                removePlayerFromRoom(player.roomCode, player.id);
                 players.delete(ws);
             }
             break;

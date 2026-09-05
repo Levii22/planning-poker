@@ -14,6 +14,7 @@ class Game {
         this.isHost = false;
         this.players = [];
         this.gameState = 'waiting';
+        this.displayedGameState = null;
         this.cardValues = [];
 
         // Sub-managers
@@ -22,7 +23,8 @@ class Game {
         this.tableManager = new TableManager(document.getElementById('playersContainer'));
         this.deckManager = new DeckManager(
             document.getElementById('cardDeck'),
-            document.getElementById('deckCards')
+            document.getElementById('deckCards'),
+            this.tableManager
         );
         this.revealManager = new RevealManager(
             document.getElementById('revealOverlay'),
@@ -118,22 +120,25 @@ class Game {
     }
 
     updateUI() {
-        // Status Badge
-        const statusText = {
-            'waiting': 'Waiting to Start',
-            'voting': 'Vote Now!',
-            'revealed': 'Cards Revealed'
-        };
-        this.elements.gameStatus.textContent = statusText[this.gameState] || 'Unknown';
-        this.elements.gameStatus.className = `status-badge status-${this.gameState}`;
+        // Table Center Message & Status Badge - Only update when gameState actually changes!
+        if (this.displayedGameState !== this.gameState) {
+            this.displayedGameState = this.gameState;
 
-        // Table Center Message
-        const centerMessages = {
-            'waiting': '<div class="waiting-text">Waiting to start...</div>',
-            'voting': '<div class="voting-text">🗳️ Select your card!</div>',
-            'revealed': '<div class="revealed-text">📊 Results are in!</div>'
-        };
-        this.elements.tableCenter.innerHTML = centerMessages[this.gameState] || '';
+            const statusText = {
+                'waiting': 'Waiting to Start',
+                'voting': 'Vote Now!',
+                'revealed': 'Cards Revealed'
+            };
+            this.elements.gameStatus.textContent = statusText[this.gameState] || 'Unknown';
+            this.elements.gameStatus.className = `status-badge status-${this.gameState}`;
+
+            const centerMessages = {
+                'waiting': '<div class="waiting-text">Waiting to start...</div>',
+                'voting': '<div class="voting-text">🗳️ Select your card!</div>',
+                'revealed': '<div class="revealed-text">📊 Results are in!</div>'
+            };
+            this.elements.tableCenter.innerHTML = centerMessages[this.gameState] || '';
+        }
 
         // Ticker Banner
         if (this.elements.triviaBanner) {
@@ -167,8 +172,33 @@ class Game {
     }
 
     newRound() {
+        this.revealManager.closeOverlay();
         this.deckManager.reset();
+        this.tableManager.reset();
         wsClient.send('reset_round');
+    }
+
+    cleanup() {
+        this.triviaTicker.stop();
+        this.deckManager.reset();
+        this.tableManager.clear();
+        this.revealManager.closeOverlay();
+        this.avatarManager.closeAvatarModal();
+
+        this.playerId = null;
+        this.roomCode = null;
+        this.isHost = false;
+        this.players = [];
+        this.gameState = 'waiting';
+        this.displayedGameState = null;
+        this.cardValues = [];
+
+        if (this.elements.hostControls) {
+            this.elements.hostControls.classList.add('hidden');
+        }
+        if (this.elements.triviaBanner) {
+            this.elements.triviaBanner.classList.add('hidden');
+        }
     }
 
     toggleHostMode() {
@@ -230,6 +260,7 @@ class Game {
     onRoundStarted(msg) {
         soundManager.playRoundStart();
         this.deckManager.reset();
+        this.tableManager.reset();
         this.updateState(msg.roomState);
         this.deckManager.animateEnter();
     }
@@ -246,6 +277,7 @@ class Game {
 
     onRoundReset(msg) {
         this.deckManager.reset();
+        this.tableManager.reset();
         this.updateState(msg.roomState);
     }
 

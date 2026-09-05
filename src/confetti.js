@@ -1,5 +1,17 @@
-// Canvas-based particle confetti physics engine
+let activeConfettiCleanup = null;
+
+export function stopConfetti() {
+    if (activeConfettiCleanup) {
+        activeConfettiCleanup();
+        activeConfettiCleanup = null;
+    }
+}
+
 export function triggerConfetti() {
+    if (activeConfettiCleanup) {
+        activeConfettiCleanup();
+    }
+
     const canvas = document.getElementById('confettiCanvas');
     if (!canvas) return;
 
@@ -18,6 +30,22 @@ export function triggerConfetti() {
     };
     window.addEventListener('resize', resizeHandler);
 
+    let animationFrameId = null;
+
+    const cleanup = () => {
+        if (animationFrameId) {
+            cancelAnimationFrame(animationFrameId);
+            animationFrameId = null;
+        }
+        window.removeEventListener('resize', resizeHandler);
+        ctx.clearRect(0, 0, width, height);
+        if (activeConfettiCleanup === cleanup) {
+            activeConfettiCleanup = null;
+        }
+    };
+
+    activeConfettiCleanup = cleanup;
+
     const particles = [];
     const particleCount = 100;
 
@@ -33,8 +61,6 @@ export function triggerConfetti() {
             tiltAngle: 0
         });
     }
-
-    let animationFrameId;
     const startTime = Date.now();
     const duration = 6000;
 
@@ -64,9 +90,7 @@ export function triggerConfetti() {
         if (elapsed < duration && activeParticles > 0) {
             animationFrameId = requestAnimationFrame(draw);
         } else {
-            ctx.clearRect(0, 0, width, height);
-            window.removeEventListener('resize', resizeHandler);
-            cancelAnimationFrame(animationFrameId);
+            cleanup();
         }
     }
 

@@ -60,67 +60,6 @@ class SoundManager {
     // SYNTHESIS SOUND EFFECTS
     // =========================================================================
 
-    /**
-     * Card Selection - Aerodynamic card moving / flight whoosh sound
-     */
-    playCardSelect() {
-        if (this.muted) return;
-        this.initContext();
-        if (!this.ctx) return;
-
-        const now = this.ctx.currentTime;
-
-        // --- Layer 1: Air Friction / Filtered Whoosh ---
-        const bufferSize = Math.floor(this.ctx.sampleRate * 0.25);
-        if (!this.noiseBuffer) {
-            this.noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-            const output = this.noiseBuffer.getChannelData(0);
-            for (let i = 0; i < bufferSize; i++) {
-                output[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize); // Natural decaying noise
-            }
-        }
-
-        const noiseSrc = this.ctx.createBufferSource();
-        noiseSrc.buffer = this.noiseBuffer;
-
-        const filter = this.ctx.createBiquadFilter();
-        filter.type = 'bandpass';
-        filter.Q.setValueAtTime(3.2, now);
-        filter.frequency.setValueAtTime(380, now);
-        filter.frequency.exponentialRampToValueAtTime(1900, now + 0.07);
-        filter.frequency.exponentialRampToValueAtTime(450, now + 0.22);
-
-        const noiseGain = this.ctx.createGain();
-        noiseGain.gain.setValueAtTime(0.001, now);
-        noiseGain.gain.linearRampToValueAtTime(0.22, now + 0.05);
-        noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
-
-        noiseSrc.connect(filter);
-        filter.connect(noiseGain);
-        noiseGain.connect(this.ctx.destination);
-
-        noiseSrc.start(now);
-        noiseSrc.stop(now + 0.24);
-
-        // --- Layer 2: Card Aero Glide Body ---
-        const osc = this.ctx.createOscillator();
-        const oscGain = this.ctx.createGain();
-
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(240, now);
-        osc.frequency.exponentialRampToValueAtTime(540, now + 0.07);
-        osc.frequency.exponentialRampToValueAtTime(180, now + 0.2);
-
-        oscGain.gain.setValueAtTime(0.001, now);
-        oscGain.gain.linearRampToValueAtTime(0.08, now + 0.04);
-        oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
-
-        osc.connect(oscGain);
-        oscGain.connect(this.ctx.destination);
-
-        osc.start(now);
-        osc.stop(now + 0.21);
-    }
 
     /**
      * Round Start - Ascending melodic deal chime
